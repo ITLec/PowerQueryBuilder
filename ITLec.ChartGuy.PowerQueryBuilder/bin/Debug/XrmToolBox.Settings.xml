@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Options xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <PluginsStoreShowIncompatible xsi:nil="true" />
+  <PluginsStoreShowUpdates xsi:nil="true" />
+  <PluginsStoreShowNew xsi:nil="true" />
+  <PluginsStoreShowInstalled xsi:nil="true" />
+  <AllowLogUsage xsi:nil="true" />
+  <CheckUpdateOnStartup>true</CheckUpdateOnStartup>
+  <CloseOpenedPluginsSilently>false</CloseOpenedPluginsSilently>
+  <DisplayLargeIcons>true</DisplayLargeIcons>
+  <DisplayMostUsedFirst>false</DisplayMostUsedFirst>
+  <DisplayPluginsStoreOnStartup>true</DisplayPluginsStoreOnStartup>
+  <HiddenPlugins />
+  <LastAdvertisementDisplay>0001-01-01T00:00:00</LastAdvertisementDisplay>
+  <LastUpdateCheck>0001-01-01T00:00:00</LastUpdateCheck>
+  <MostUsedList />
+  <FormSize>
+    <Height>586</Height>
+    <IsMaximized>false</IsMaximized>
+    <Width>900</Width>
+  </FormSize>
+</Options>
