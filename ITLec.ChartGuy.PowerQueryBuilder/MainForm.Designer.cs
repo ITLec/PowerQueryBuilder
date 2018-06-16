@@ -148,7 +148,6 @@
             this.tsbGenerate.Name = "tsbGenerate";
             this.tsbGenerate.Size = new System.Drawing.Size(97, 27);
             this.tsbGenerate.Text = "Generate ";
-            this.tsbGenerate.Visible = false;
             this.tsbGenerate.Click += new System.EventHandler(this.tsbGenerate_Click);
             // 
             // tsbPublishEntity
@@ -160,12 +159,12 @@
             this.tsbPublishEntity.Size = new System.Drawing.Size(121, 27);
             this.tsbPublishEntity.Text = "Publish entity";
             this.tsbPublishEntity.Visible = false;
-            this.tsbPublishEntity.Click += new System.EventHandler(this.TsbPublishEntityClick);
             // 
             // toolStripSeparator3
             // 
             this.toolStripSeparator3.Name = "toolStripSeparator3";
             this.toolStripSeparator3.Size = new System.Drawing.Size(6, 30);
+            this.toolStripSeparator3.Visible = false;
             // 
             // tsbPublishAll
             // 
@@ -176,12 +175,12 @@
             this.tsbPublishAll.Size = new System.Drawing.Size(100, 27);
             this.tsbPublishAll.Text = "Publish all";
             this.tsbPublishAll.Visible = false;
-            this.tsbPublishAll.Click += new System.EventHandler(this.TsbPublishAllClick);
             // 
             // toolStripSeparator4
             // 
             this.toolStripSeparator4.Name = "toolStripSeparator4";
             this.toolStripSeparator4.Size = new System.Drawing.Size(6, 30);
+            this.toolStripSeparator4.Visible = false;
             // 
             // tssSettings
             // 
@@ -526,6 +525,8 @@
             this.listViewSelectedFields.TabIndex = 92;
             this.listViewSelectedFields.UseCompatibleStateImageBehavior = false;
             this.listViewSelectedFields.View = System.Windows.Forms.View.Details;
+            this.listViewSelectedFields.ControlAdded += new System.Windows.Forms.ControlEventHandler(this.listViewSelectedFields_ControlAdded);
+            this.listViewSelectedFields.DragDrop += new System.Windows.Forms.DragEventHandler(this.listViewSelectedFields_DragDrop);
             this.listViewSelectedFields.DoubleClick += new System.EventHandler(this.listViewSelectedFields_DoubleClick);
             this.listViewSelectedFields.MouseDown += new System.Windows.Forms.MouseEventHandler(this.listViewSelectedFields_MouseDown);
             this.listViewSelectedFields.MouseMove += new System.Windows.Forms.MouseEventHandler(this.listViewSelectedFields_MouseMove);

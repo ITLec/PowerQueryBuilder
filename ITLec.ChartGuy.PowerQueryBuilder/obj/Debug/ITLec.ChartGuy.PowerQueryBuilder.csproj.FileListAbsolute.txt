@@ -91,7 +91,6 @@ C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuild
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\bin\Debug\Microsoft.Xrm.Sdk.Deployment.xml
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\bin\Debug\Microsoft.Xrm.Sdk.Workflow.xml
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\bin\Debug\Microsoft.Xrm.Tooling.Connector.xml
-C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.csprojResolveAssemblyReference.cache
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.AttributeForm.resources
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.Forms.ErrorList.resources
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.Forms.XmlContentDisplayDialog.resources

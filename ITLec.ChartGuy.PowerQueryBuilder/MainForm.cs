@@ -46,10 +46,11 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         {
             txtSearchEntity.Text = string.Empty;
             lvEntities.Items.Clear();
+            listViewAllFields.Items.Clear();
+            listViewSelectedFields.Items.Clear();
             gbEntities.Enabled = false;
             tsbPublishEntity.Enabled = false;
             tsbPublishAll.Enabled = false;
-            tsbGenerate.Enabled = false;
 
             lvSourceViews.Items.Clear();
 
@@ -84,7 +85,6 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                         lvEntities.Items.AddRange(listViewItemsCache);
 
                         gbEntities.Enabled = true;
-                        tsbGenerate.Enabled = true;
                     }
                 }
             });
@@ -103,7 +103,6 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         {
             tsbPublishEntity.Enabled = false;
             tsbPublishAll.Enabled = false;
-            tsbGenerate.Enabled = false;
             tsbLoadEntities.Enabled = false;
 
             //var targetViews = lvTargetViews.CheckedItems.Cast<ListViewItem>().Select(i => new ViewDefinition((Entity)i.Tag)).ToList();
@@ -112,54 +111,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         }
 
         #endregion Save Views
-
-        #region Publish Entity
-
-        private void TsbPublishEntityClick(object sender, EventArgs e)
-        {
-            if (lvEntities.SelectedItems.Count > 0)
-            {
-                tsbPublishEntity.Enabled = false;
-                tsbPublishAll.Enabled = false;
-                tsbGenerate.Enabled = false;
-                tsbLoadEntities.Enabled = false;
-
-                WorkAsync(new WorkAsyncInfo
-                {
-                    Message = "Publishing entity...",
-                    AsyncArgument = lvEntities.SelectedItems[0].Tag,
-                    Work = (bw, evt) =>
-                    {
-                        var pubRequest = new PublishXmlRequest();
-                        pubRequest.ParameterXml = string.Format(@"<importexportxml>
-                                                           <entities>
-                                                              <entity>{0}</entity>
-                                                           </entities>
-                                                           <nodes/><securityroles/><settings/><workflows/>
-                                                        </importexportxml>",
-                                                                evt.Argument);
-
-                        Service.Execute(pubRequest);
-                    },
-                    PostWorkCallBack = evt =>
-                    {
-                        if (evt.Error != null)
-                        {
-                            string errorMessage = CrmExceptionHelper.GetErrorMessage(evt.Error, false);
-                            MessageBox.Show(this, errorMessage, "Error", MessageBoxButtons.OK,
-                                                              MessageBoxIcon.Error);
-                        }
-
-                        tsbPublishEntity.Enabled = true;
-                        tsbPublishAll.Enabled = true;
-                        tsbGenerate.Enabled = true;
-                        tsbLoadEntities.Enabled = true;
-                    }
-                });
-            }
-        }
-
-        #endregion Publish Entity
+        
 
         #endregion Main ToolStrip Handlers
 
@@ -177,6 +129,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         {
           var entityMetaData =  MetadataHelper.RetrieveEntity(entityName, Service);
             listViewAllFields.Items.Clear();
+            listViewSelectedFields.Items.Clear();
             foreach(var attribute in entityMetaData.Attributes)
             {
 
@@ -509,38 +462,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             CloseTool();
         }
 
-        private void TsbPublishAllClick(object sender, EventArgs e)
-        {
-            tsbPublishEntity.Enabled = false;
-            tsbPublishAll.Enabled = false;
-            tsbGenerate.Enabled = false;
-            tsbLoadEntities.Enabled = false;
 
-            WorkAsync(new WorkAsyncInfo
-            {
-                Message = "Publishing all customizations...",
-                AsyncArgument = null,
-                Work = (bw, evt) =>
-                {
-                    var pubRequest = new PublishAllXmlRequest();
-                    Service.Execute(pubRequest);
-                },
-                PostWorkCallBack = evt =>
-                {
-                    if (evt.Error != null)
-                    {
-                        string errorMessage = CrmExceptionHelper.GetErrorMessage(evt.Error, false);
-                        MessageBox.Show(this, errorMessage, "Error", MessageBoxButtons.OK,
-                                                          MessageBoxIcon.Error);
-                    }
-
-                    tsbPublishEntity.Enabled = true;
-                    tsbPublishAll.Enabled = true;
-                    tsbGenerate.Enabled = true;
-                    tsbLoadEntities.Enabled = true;
-                }
-            });
-        }
 
         private void chkShowSystem_CheckedChanged(object sender, EventArgs e)
         {
@@ -635,37 +557,19 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
            if( tabMain.SelectedIndex == 0)
             {
                 tsbLoadEntities.Visible = true;
-                tsbGenerate.Visible = false;
             }
            else
             {
                 tsbLoadEntities.Visible = false;
-                tsbGenerate.Visible = true;
             }
         }
 
         private void tsbGenerate_Click(object sender, EventArgs e)
         {
             ClearFinalResultTab();
+            tabControlResult.SelectTab("tabPageFinalResult");
             GeneratePowerBIODataQuery();
-            //TabPage tapPageMainQuery = new TabPage("MainQuery");
-            //tapPageMainQuery.Text = "MainQuery";
 
-            //System.Windows.Forms.RichTextBox txtMainQuery = new System.Windows.Forms.RichTextBox();
-            //txtMainQuery.Name = "txtMainQuery";
-            //txtMainQuery.Dock = DockStyle.Fill;
-            //tapPageMainQuery.Controls.Add(txtMainQuery);
-            //tabControlResult.TabPages.Add(tapPageMainQuery);
-            //WorkAsync(new WorkAsyncInfo
-            //{
-            //    Message = "Generating PowerBI Queries...",
-            //    AsyncArgument = null,
-            //    Work = (bw, evt) =>
-            //    {
-
-            //        GeneratePowerBIODataQuery();
-            //    },
-            //});
         }
 
         private void ClearFinalResultTab()
@@ -678,7 +582,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
         void GeneratePowerBIODataQuery()
         {
-
+            GenerateSeviceURL();
 
 
             List<string> picklistNames = new List<string>();
@@ -748,6 +652,20 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
 
             tabControlResult.Refresh();
+        }
+
+        private void GenerateSeviceURL()
+        {
+
+            RetrieveCurrentOrganizationResponse retrieveCurrentOrganizationResponse = (RetrieveCurrentOrganizationResponse)base.Service.Execute(new RetrieveCurrentOrganizationRequest());
+            string arg = ((DataCollection<Microsoft.Xrm.Sdk.Organization.EndpointType, string>)retrieveCurrentOrganizationResponse.Detail.Endpoints)[Microsoft.Xrm.Sdk.Organization.EndpointType.WebApplication];
+            Version version = Version.Parse(retrieveCurrentOrganizationResponse.Detail.OrganizationVersion);
+           // string ServiceAPIURL = $"{arg}api/data/v{version.ToString(2)}";
+            string ServiceAPIURL = $"{arg}api/data/v8.2";
+
+            
+            CreateTabPage($"tabPageServiceRootURL", $"ServiceRootURL", $"txt_tabPageServiceRootURL", ServiceAPIURL);
+
         }
 
         private void GenerateEnumOptionSet(AttributeMetadata attributeMetadata)
@@ -1024,7 +942,6 @@ in
         void AddItemTolistView(ListView _listView, string itemName, string itemDisplayName, string type)
         {
 
-
             bool canAddField = true;
             foreach (ListViewItem item in _listView.Items)
             {
@@ -1072,6 +989,29 @@ in
             //{
             //    var ff = (TabPage)e.Control;
             //}
+        }
+
+        private void listViewSelectedFields_ControlAdded(object sender, ControlEventArgs e)
+        {
+            EnableVisableListViewSelectedFields();
+        }
+        void EnableVisableListViewSelectedFields()
+        {
+            bool isVisable = false;
+
+            if (listViewSelectedFields.Items.Count > 0)
+            {
+                isVisable = true;
+            }
+
+            listViewSelectedFields.Visible = isVisable;
+            listViewSelectedFields.Enabled = isVisable;
+            tsbGenerate.Enabled = isVisable;
+        }
+
+        private void listViewSelectedFields_DragDrop(object sender, DragEventArgs e)
+        {
+            EnableVisableListViewSelectedFields();
         }
     }
 }

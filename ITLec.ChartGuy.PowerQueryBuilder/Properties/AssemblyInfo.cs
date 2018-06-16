@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 // l'ensemble d'attributs suivant. Changez les valeurs de ces attributs pour modifier les informations
 // associées à un assembly.
 [assembly: AssemblyTitle("PowerQueryBuilder")]
-[assembly: AssemblyDescription("Here you can create Power BI Queries")]
+[assembly: AssemblyDescription("Create Power Query (M) scripts for Dynamics 365 and Power BI")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Mohamed Rasheed (ITLec) and Ulrik “CRM Chart Guy” Carlsson (Elev8 Solutions)")]
 [assembly: AssemblyProduct("ITLec.ChartGuy.PowerQueryBuilder")]
@@ -31,5 +31,5 @@ using System.Runtime.InteropServices;
 // Vous pouvez spécifier toutes les valeurs ou indiquer les numéros de build et de révision par défaut
 // en utilisant '*', comme indiqué ci-dessous :
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.2018.6.4")]
-[assembly: AssemblyFileVersion("1.2018.6.4")]
+[assembly: AssemblyVersion("1.2018.6.15")]
+[assembly: AssemblyFileVersion("1.2018.6.15")]
