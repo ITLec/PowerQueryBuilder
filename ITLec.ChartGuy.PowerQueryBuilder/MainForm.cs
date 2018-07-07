@@ -16,24 +16,42 @@ using System.Xml;
 using Tanguy.WinForm.Utilities.DelegatesHelpers;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
+using ITLec.ChartGuy.PowerQueryBuilder.FetchXml;
 
 namespace ITLec.ChartGuy.PowerQueryBuilder
 {
     public partial class MainForm : PluginControlBase, IGitHubPlugin, IHelpPlugin
     {
+        #region IGitHubPlugin
+        public string HelpUrl { get { return "https://crmchartguy.com/power-query-builder/"; } }
+
+        public string UserName
+        {
+            get
+            {
+                return "ITLec";
+            }
+        }
+        public string RepositoryName { get { return "PowerQueryBuilder"; } }
+        #endregion
+
+        #region Variables
         private List<EntityMetadata> entitiesCache;
         private ListViewItem[] listViewItemsCache;
         private List<ListViewItem> sourceViewsItems;
-        private List<ListViewItem> targetViewsItems;
+        private List<ListViewItem> allAttributesListViewItemCache;
+        private List<ListViewItem> selectedAttributesListViewItemCache;
+        private List<ListViewItem> fetchXmlAttributesListViewItemCache;
         EntityMetadata CurrentEntityMetadataWithItems = null;
+        #endregion
         #region Constructor
 
         public MainForm()
         {
             InitializeComponent();
-
-            var tt = new ToolTip();
-            tt.SetToolTip(lvSourceViews, "Double click on a selected row to display its layout XML");
+            allAttributesListViewItemCache = new List<ListViewItem>();
+            selectedAttributesListViewItemCache = new List<ListViewItem>();
+            fetchXmlAttributesListViewItemCache = new List<ListViewItem>();
         }
 
         #endregion Constructor
@@ -42,6 +60,28 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
         #region Fill Entities
 
+        private void OnSearchKeyUp(object sender, KeyEventArgs keyEventArgs)
+        {
+            var entityName = txtSearchEntity.Text;
+            if (string.IsNullOrWhiteSpace(entityName))
+            {
+                lvEntities.BeginUpdate();
+                lvEntities.Items.Clear();
+                lvEntities.Items.AddRange(listViewItemsCache);
+                lvEntities.EndUpdate();
+            }
+            else
+            {
+                lvEntities.BeginUpdate();
+                lvEntities.Items.Clear();
+                var filteredItems = listViewItemsCache
+                    .Where(item => item.Text.StartsWith(entityName, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+                lvEntities.Items.AddRange(filteredItems);
+                lvEntities.EndUpdate();
+            }
+
+        }
         private void LoadEntities()
         {
             txtSearchEntity.Text = string.Empty;
@@ -49,8 +89,6 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             listViewAllFields.Items.Clear();
             listViewSelectedFields.Items.Clear();
             gbEntities.Enabled = false;
-            tsbPublishEntity.Enabled = false;
-            tsbPublishAll.Enabled = false;
 
             lvSourceViews.Items.Clear();
 
@@ -97,67 +135,104 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
         #endregion Fill Entities
 
-        #region Save Views
 
-        private void TsbSaveViewsClick(object sender, EventArgs e)
-        {
-            tsbPublishEntity.Enabled = false;
-            tsbPublishAll.Enabled = false;
-            tsbLoadEntities.Enabled = false;
-
-            //var targetViews = lvTargetViews.CheckedItems.Cast<ListViewItem>().Select(i => new ViewDefinition((Entity)i.Tag)).ToList();
-            var sourceView = new ViewDefinition((Entity)lvSourceViews.SelectedItems.Cast<ListViewItem>().First().Tag);
-            
-        }
-
-        #endregion Save Views
-        
 
         #endregion Main ToolStrip Handlers
 
-        #region ListViews Handlers
+        #region Views
+        public static string FilterXml="";
+        private void LvSourceViewsSelectedIndexChanged(object sender, EventArgs e)
+        {
+            FillAttributes();
+            if (lvSourceViews.SelectedItems.Count > 0)
+            {
+                lvSourceViews.SelectedIndexChanged -= LvSourceViewsSelectedIndexChanged;
+                lvSourceViews.Enabled = false;
 
-        #region Fill Views
+                WorkAsync(new WorkAsyncInfo
+                {
+                    Message = "Loading view items...",
+                    AsyncArgument = lvSourceViews.SelectedItems[0].Tag,
+                    Work = (bw, evt) =>
+                    {
+                        Entity currentSelectedView = (Entity)evt.Argument;
+                        string layoutXml = currentSelectedView["layoutxml"].ToString();
+                        string fetchXml = currentSelectedView.Contains("fetchxml")
+                                              ? currentSelectedView["fetchxml"].ToString()
+                                              : string.Empty;
 
+                        XmlDocument layoutDoc = new XmlDocument();
+                        layoutDoc.LoadXml(layoutXml);
+
+                        FilterXml = FetchXmlHelper.GetFilterXmlStr(fetchXml);
+                        txtFetchXml.Text = fetchXml;
+                        var headers = new List<ColumnHeader>();
+
+
+
+                        //var selectedItems = listViewSelectedFields.Items;
+
+                        //foreach (ListViewItem item in selectedItems)
+                        //{
+                        //    MoveItemFormListViewToAnother(listViewSelectedFields, listViewAllFields, (PowerQueryAttribute) item.Tag);
+                        //}
+
+                        foreach (XmlNode columnNode in layoutDoc.SelectNodes("grid/row/cell"))
+                        {
+
+                            /////////////
+
+
+                            if (!columnNode.Attributes["name"].Value.Contains("."))
+                            {
+                                //todo if sub-entity
+                                // string fieldDisplayName = MetadataHelper.RetrieveAttributeDisplayName(CurrentEntityMetadataWithItems,
+                                //                                                           columnNode.Attributes["name"].Value,
+                                //                                                           fetchXml, Service);
+
+                                AttributeMetadata attribute = (from attr in CurrentEntityMetadataWithItems.Attributes
+                                                               where attr.LogicalName == columnNode.Attributes["name"].Value
+                                                               select attr).FirstOrDefault();
+
+                                PowerQueryAttribute powerQueryAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(attribute);
+                                AddItemToSelectedAttributeslistView(powerQueryAttribute);
+                            }
+
+
+                            ///////////////
+                        }
+                    },
+                    PostWorkCallBack = evt =>
+                    {
+                        if (evt.Error != null)
+                        {
+                            MessageBox.Show(ParentForm, "Error while displaying view: " + evt.Error.Message, "Error",
+                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+
+                        lvSourceViews.SelectedIndexChanged += LvSourceViewsSelectedIndexChanged;
+                        lvSourceViews.Enabled = true;
+                        EnableVisableListViewSelectedFields();
+                    }
+                });
+            }
+
+
+        }
         private void BwFillViewsDoWork(object sender, DoWorkEventArgs e)
         {
             string entityName = e.Argument.ToString(); ;
             FillViews(entityName);
+            CurrentEntityMetadataWithItems = MetadataHelper.RetrieveEntity(entityName, Service);
         }
 
-        private void FillAttributes(string entityName)
+
+        private void FillViews(string entityLogicalName, List<Entity> viewsList)
         {
-          var entityMetaData =  MetadataHelper.RetrieveEntity(entityName, Service);
-            listViewAllFields.Items.Clear();
-            listViewSelectedFields.Items.Clear();
-            foreach(var attribute in entityMetaData.Attributes)
-            {
 
-                string displayName = attribute.LogicalName;
-
-                if(attribute.DisplayName != null && attribute.DisplayName.UserLocalizedLabel != null && attribute.DisplayName.UserLocalizedLabel.Label != null)
-                {
-
-                    displayName = attribute.DisplayName.UserLocalizedLabel.Label;
-                }
-
-                AddItemTolistView(listViewAllFields,attribute.LogicalName, displayName, attribute.AttributeType.Value.ToString());
-                //var selectedFieldItem = new ListViewItem { Text = displayName, Tag = attribute.LogicalName };
-                //selectedFieldItem.SubItems.Add(attribute.LogicalName);
-
-                //listViewAllFields.Items.Add(selectedFieldItem);
-            }
-        }
-
-        private void FillViews(string entityName)
-        {
-            string entityLogicalName = entityName;
-
-            List<Entity> viewsList = ViewHelper.RetrieveViews(entityLogicalName, entitiesCache, Service);
             viewsList.AddRange(ViewHelper.RetrieveUserViews(entityLogicalName, entitiesCache, Service));
 
             sourceViewsItems = new List<ListViewItem>();
-            targetViewsItems = new List<ListViewItem>();
 
             foreach (Entity view in viewsList)
             {
@@ -246,18 +321,112 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                         clonedItem.ToolTipText = "This managed view has not been defined as customizable";
                     }
 
-                    targetViewsItems.Add(clonedItem);
-                    //ListViewDelegates.AddItem(lvTargetViews, clonedItem);
+                }
+            }
+        }
+
+        private void FillViews(string entityName)
+        {
+            string entityLogicalName = entityName;
+
+            List<Entity> viewsList = ViewHelper.RetrieveViews(entityLogicalName, entitiesCache, Service);
+            viewsList.AddRange(ViewHelper.RetrieveUserViews(entityLogicalName, entitiesCache, Service));
+
+            sourceViewsItems = new List<ListViewItem>();
+
+            foreach (Entity view in viewsList)
+            {
+                bool display = true;
+
+                var item = new ListViewItem(view["name"].ToString());
+                item.Tag = view;
+
+                #region Gestion de l'image associée à la vue
+
+                switch ((int)view["querytype"])
+                {
+                    case ViewHelper.VIEW_BASIC:
+                        {
+                            if (view.LogicalName == "savedquery")
+                            {
+                                if ((bool)view["isdefault"])
+                                {
+                                    item.SubItems.Add("Default public view");
+                                    item.ImageIndex = 3;
+                                }
+                                else
+                                {
+                                    item.SubItems.Add("Public view");
+                                    item.ImageIndex = 0;
+                                }
+                            }
+                            else
+                            {
+                                item.SubItems.Add("User view");
+                                item.ImageIndex = 6;
+                            }
+                        }
+                        break;
+
+                    case ViewHelper.VIEW_ADVANCEDFIND:
+                        {
+                            item.SubItems.Add("Advanced find view");
+                            item.ImageIndex = 1;
+                        }
+                        break;
+
+                    case ViewHelper.VIEW_ASSOCIATED:
+                        {
+                            item.SubItems.Add("Associated view");
+                            item.ImageIndex = 2;
+                        }
+                        break;
+
+                    case ViewHelper.VIEW_QUICKFIND:
+                        {
+                            item.SubItems.Add("QuickFind view");
+                            item.ImageIndex = 5;
+                        }
+                        break;
+
+                    case ViewHelper.VIEW_SEARCH:
+                        {
+                            item.SubItems.Add("Lookup view");
+                            item.ImageIndex = 4;
+                        }
+                        break;
+
+                    default:
+                        {
+                            //item.SubItems.Add(view["name"].ToString());
+                            display = false;
+                        }
+                        break;
+                }
+
+                #endregion Gestion de l'image associée à la vue
+
+                if (display)
+                {
+                    // Add view to each list of views (source and target)
+                    ListViewItem clonedItem = (ListViewItem)item.Clone();
+
+                    sourceViewsItems.Add(item);
+                    //ListViewDelegates.AddItem(lvSourceViews, item);
+
+                    if (view.Contains("iscustomizable") && ((BooleanManagedProperty)view["iscustomizable"]).Value == false
+                        && view.Contains("ismanaged") && (bool)view["ismanaged"])
+                    {
+                        clonedItem.ForeColor = Color.Gray;
+                        clonedItem.ToolTipText = "This managed view has not been defined as customizable";
+                    }
+                    
                 }
             }
         }
 
         private void BwFillViewsRunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
-            Cursor = Cursors.Default;
-            gbSourceViews.Enabled = true;
-            //kgbTargetViews.Enabled = true;
-
             if (e.Error != null)
             {
                 MessageBox.Show(this, "An error occured: " + e.Error.Message, "Error", MessageBoxButtons.OK,
@@ -272,462 +441,195 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 return;
             }
 
+            Cursor = Cursors.Default;
+            gbSourceViews.Enabled = true;
             lvSourceViews.Items.AddRange(sourceViewsItems.ToArray());
-            //lvTargetViews.Items.AddRange(targetViewsItems.ToArray());
+
+            FillAttributes();
+            EnableVisableListViewSelectedFields();
         }
 
-        private void lvEntities_SelectedIndexChanged(object sender, EventArgs e)
+        private void lvEntities_SelectedIndexChanged(object sender, EventArgs eventArgs)
         {
+            ClearForm();
+            listViewAllFields.Items.Clear();
+            //WorkAsync(new WorkAsyncInfo
+            //{
+            //    Message = "Loading Entity Views & Attributes...",
+            //    Work = (bw, evt) =>
+            //    {
 
-            WorkAsync(new WorkAsyncInfo
+            //        if (lvEntities.SelectedItems.Count > 0)
+            //        {
+            //            string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
+
+            //            // Reinit other controls
+            //            lvSourceViews.Items.Clear();
+
+            //            Cursor = Cursors.WaitCursor;
+
+            //            // Launch treatment
+            //            var bwFillViews = new BackgroundWorker();
+            //            bwFillViews.DoWork += BwFillViewsDoWork;
+            //            bwFillViews.RunWorkerAsync(entityLogicalName);
+            //            bwFillViews.RunWorkerCompleted += BwFillViewsRunWorkerCompleted;
+
+            //        }
+            //    }
+            //});
+
+            //////////////////////
+
+            if (lvEntities.SelectedItems.Count > 0)
             {
-                Message = "Loading Entity Attributes...",
-                Work = (bw, evt) =>
-                {
 
-                    if (lvEntities.SelectedItems.Count > 0)
-                    {
-                        string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
+                string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
 
-                        // Reinit other controls
-                        lvSourceViews.Items.Clear();
+                // Reinit other controls
+                lvSourceViews.Items.Clear();
 
-                        Cursor = Cursors.WaitCursor;
-
-                        // Launch treatment
-                        var bwFillViews = new BackgroundWorker();
-                        bwFillViews.DoWork += BwFillViewsDoWork;
-                        bwFillViews.RunWorkerAsync(entityLogicalName);
-                        bwFillViews.RunWorkerCompleted += BwFillViewsRunWorkerCompleted;
-
-                        
-                        CurrentEntityMetadataWithItems = MetadataHelper.RetrieveEntity(entityLogicalName, Service);
-
-                        FillAttributes(entityLogicalName);
-                    }
-                }
-            });
-
-            ClearFinalResultTab();
-        }
-
-        #endregion Fill Views
-
-        #region Display View
-
-        private void LvSourceViewsSelectedIndexChanged(object sender, EventArgs e)
-        {
-
-            if (lvSourceViews.SelectedItems.Count > 0)
-            {
-                lvSourceViews.SelectedIndexChanged -= LvSourceViewsSelectedIndexChanged;
-                lvSourceViews.Enabled = false;
-
+                Cursor = Cursors.WaitCursor;
                 WorkAsync(new WorkAsyncInfo
                 {
-                    Message = "Loading view items...",
-                    AsyncArgument = lvSourceViews.SelectedItems[0].Tag,
-                    Work = (bw, evt) =>
+                    Message = "Retrieving Attributes ...",
+                    Work = (bw, e) =>
                     {
-                        Entity currentSelectedView = (Entity)evt.Argument;
-                        string layoutXml = currentSelectedView["layoutxml"].ToString();
-                        string fetchXml = currentSelectedView.Contains("fetchxml")
-                                              ? currentSelectedView["fetchxml"].ToString()
-                                              : string.Empty;
+                        List<Entity> viewsList = ViewHelper.RetrieveViews(entityLogicalName, entitiesCache, Service);
 
-                        XmlDocument layoutDoc = new XmlDocument();
-                        layoutDoc.LoadXml(layoutXml);
-
-
-
-                        var headers = new List<ColumnHeader>();
-                        
-                        
-
-                        var selectedItems = listViewSelectedFields.Items;
-                        //CopyItemsFromSelectedFieldsToAllFields(selectedItems);
-
-                        foreach (ListViewItem item in selectedItems)
-                        {
-                            MoveItemFormListViewToAnother(listViewSelectedFields, listViewAllFields, item.Tag.ToString());
-                        }
-
-                        foreach (XmlNode columnNode in layoutDoc.SelectNodes("grid/row/cell"))
-                        {
-
-                            /////////////
-
-
-                            if (!columnNode.Attributes["name"].Value.Contains("."))
-                            {
-                                string fieldDisplayName = MetadataHelper.RetrieveAttributeDisplayName(CurrentEntityMetadataWithItems,
-                                                                                           columnNode.Attributes["name"].Value,
-                                                                                           fetchXml, Service);
-
-
-
-                                //AddItemTolistView(listViewSelectedFields,columnNode.Attributes["name"].Value, fieldDisplayName);
-
-                                MoveItemFormListViewToAnother(listViewAllFields, listViewSelectedFields, columnNode.Attributes["name"].Value);
-
-                            }
-
-
-                            ///////////////
-                        }
+                        CurrentEntityMetadataWithItems = MetadataHelper.RetrieveEntity(entityLogicalName, Service);
+                          e.Result = viewsList;
                     },
-                    PostWorkCallBack = evt =>
+                    PostWorkCallBack = e =>
                     {
-                        if (evt.Error != null)
+                        if (e.Error != null)
                         {
-                            MessageBox.Show(ParentForm, "Error while displaying view: " + evt.Error.Message, "Error",
-                                MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            string errorMessage = CrmExceptionHelper.GetErrorMessage(e.Error, true);
+                            CommonDelegates.DisplayMessageBox(ParentForm, errorMessage, "Error", MessageBoxButtons.OK,
+                                                              MessageBoxIcon.Error);
                         }
+                        else
+                        {
+                            List<Entity> viewsList = (List<Entity>)e.Result;
+                            FillViews(entityLogicalName, viewsList);
 
-                        lvSourceViews.SelectedIndexChanged += LvSourceViewsSelectedIndexChanged;
-                        lvSourceViews.Enabled = true;
+
+
+                            gbSourceViews.Enabled = true;
+                            lvSourceViews.Items.AddRange(sourceViewsItems.ToArray());
+
+                            FillAttributes();
+                            EnableVisableListViewSelectedFields();
+
+
+                            Cursor = Cursors.Default;
+                        }
                     }
                 });
             }
         }
 
-        private void LvTargetViewsItemChecked(object sender, ItemCheckedEventArgs e)
-        {
-            if (e.Item.Checked && e.Item.ForeColor == Color.Gray)
-            {
-                MessageBox.Show(this, "This view has not been defined as customizable. It can't be customized!",
-                                "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                e.Item.Checked = false;
-            }
-
-            //if (ListViewDelegates.GetCheckedItems(lvTargetViews).Length > 0)
-            //{
-            //    tsbSaveViews.Enabled = true;
-            //    tsbPublishEntity.Enabled = true;
-            //}
-            //else
-            //{
-            //    tsbSaveViews.Enabled = false;
-            //    tsbPublishEntity.Enabled = false;
-            //}
-        }
-
-        #endregion Display View
-
-        #endregion ListViews Handlers
-
-        private void LvEntitiesColumnClick(object sender, ColumnClickEventArgs e)
+        private void ClearForm()
         {
 
-            lvEntities.Sorting = lvEntities.Sorting == SortOrder.Ascending ? SortOrder.Descending : SortOrder.Ascending;
-            lvEntities.ListViewItemSorter = new ListViewItemComparer(e.Column, lvEntities.Sorting);
+            listViewSelectedFields.Items.Clear();
+            
+            ClearTabs();
         }
 
-        private void LvSourceViewsDoubleClick(object sender, EventArgs e)
+        private void ClearTabs()
         {
-            if (lvSourceViews.SelectedItems.Count == 0)
-                return;
-
-            ListViewItem item = lvSourceViews.SelectedItems[0];
-            var view = (Entity)item.Tag;
-
-            var dialog = new XmlContentDisplayDialog(view["layoutxml"].ToString());
-            dialog.ShowDialog(this);
+            ClearODataResultTab();
+            ClearFetchXmlTab();
+            ClearOptionSetTab();
+            ClearServiceRootURLTab();
         }
 
-        private void OnSearchKeyUp(object sender, KeyEventArgs e)
-        {
-            var entityName = txtSearchEntity.Text;
-            if (string.IsNullOrWhiteSpace(entityName))
-            {
-                lvEntities.BeginUpdate();
-                lvEntities.Items.Clear();
-                lvEntities.Items.AddRange(listViewItemsCache);
-                lvEntities.EndUpdate();
-            }
-            else
-            {
-                lvEntities.BeginUpdate();
-                lvEntities.Items.Clear();
-                var filteredItems = listViewItemsCache
-                    .Where(item => item.Text.StartsWith(entityName, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-                lvEntities.Items.AddRange(filteredItems);
-                lvEntities.EndUpdate();
-            }
-        }
-
+        #endregion Fill Views
+        
         private void TsbCloseThisTabClick(object sender, EventArgs e)
         {
             CloseTool();
         }
-
-
-
-        private void chkShowSystem_CheckedChanged(object sender, EventArgs e)
-        {
-          //  FilterTargetViews(chkShowSystem.Checked, chkShowUser.Checked);
-         }
-
-        private void chkShowUser_CheckedChanged(object sender, EventArgs e)
-        {
-            //FilterTargetViews(chkShowSystem.Checked, chkShowUser.Checked);
-        }
-
-        private void FilterTargetViews(bool showSystem, bool showUser)
-        {
-            var filteredViews = targetViewsItems.Where(v =>
-                ((Entity) v.Tag).LogicalName == "savedquery" && showSystem
-                || ((Entity) v.Tag).LogicalName == "userquery" && showUser
-                );
-
-            //lvTargetViews.Items.Clear();
-
-            //lvTargetViews.Items.AddRange(filteredViews.ToArray());
-        }
-
-        public string RepositoryName { get { return "ITLec.ChartGuy.PowerQueryBuilder"; } }
-        public string UserName { get { return "MscrmTools"; } }
-        public string HelpUrl { get { return "https://github.com/ITLec/ITLec.ChartGuy.PowerQueryBuilder/wiki"; } }
-
-        private void buttonAddToSelectedList_Click(object sender, EventArgs e)
-        {
-            var selectedItems = listViewAllFields.SelectedItems;
-         //   CopyItemsFromAllFieldsToSelectedFields(selectedItems);
-
-            foreach(ListViewItem item in selectedItems)
-            {
-                MoveItemFormListViewToAnother(listViewAllFields, listViewSelectedFields, item.Tag.ToString());
-            }
-
-            var checkedItems = listViewAllFields.CheckedItems;
-            // CopyItemsFromAllFieldsToSelectedFields(checkedItems);
-
-
-            foreach (ListViewItem item in checkedItems)
-            {
-                MoveItemFormListViewToAnother(listViewAllFields, listViewSelectedFields, item.Tag.ToString());
-            }
-        }
-        
-
         private void buttonRemoveFromSelectedFields_Click(object sender, EventArgs e)
         {
-
-            var selectedItems = listViewSelectedFields.SelectedItems;
-            //CopyItemsFromSelectedFieldsToAllFields(selectedItems);
-
-            foreach (ListViewItem item in selectedItems)
-            {
-                MoveItemFormListViewToAnother(listViewSelectedFields, listViewAllFields, item.Tag.ToString());
-            }
-
+            
             var checkedItems = listViewSelectedFields.CheckedItems;
             //    CopyItemsFromSelectedFieldsToAllFields(checkedItems);
 
-
+            List<ListViewItem> selectedAttributesListViewItemCacheTmp = new List<ListViewItem>( selectedAttributesListViewItemCache);
             foreach (ListViewItem item in checkedItems)
             {
-                MoveItemFormListViewToAnother( listViewSelectedFields, listViewAllFields, item.Tag.ToString());
+                selectedAttributesListViewItemCache.Remove(item);
             }
+
+            listViewSelectedFields.Items.Clear();
+            ClearTabs();
+            listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
+
+            RefreshAllAttributesList();
+            EnableVisableListViewSelectedFields();
         }
         
-
-        private void CopyItemsFromSelectedFieldsToAllFields(ListView.SelectedListViewItemCollection selectedItems)
-        {
-            foreach (ListViewItem selectedItem in selectedItems)
-            {
-                listViewSelectedFields .Items.Remove(selectedItem);
-                listViewAllFields.Items.Add(selectedItem);
-            }
-        }
-
-        private void groupBox1_Enter(object sender, EventArgs e)
-        {
-
-        }
-
-        private void button1_Click(object sender, EventArgs e)
-        {
-
-        }
-
         private void tabMain_SelectedIndexChanged(object sender, EventArgs e)
         {
-           if( tabMain.SelectedIndex == 0)
+            if (tabMain.SelectedIndex == 0)
             {
                 tsbLoadEntities.Visible = true;
             }
-           else
+            else
             {
                 tsbLoadEntities.Visible = false;
             }
-        }
 
-        private void tsbGenerate_Click(object sender, EventArgs e)
-        {
-            ClearFinalResultTab();
-            tabControlResult.SelectTab("tabPageFinalResult");
-            GeneratePowerBIODataQuery();
-
-        }
-
-        private void ClearFinalResultTab()
-        {
-           foreach( TabPage tapPage in tabControlResult.TabPages)
+            if (tabMain.SelectedIndex == 2)
             {
-                tabControlResult.TabPages.Remove(tapPage);
+                tsbGenerateFechXml.Visible = true;
+                tsbUpdateFetchXml.Visible = false;
             }
-        }
-
-        void GeneratePowerBIODataQuery()
-        {
-            GenerateSeviceURL();
-
-
-            List<string> picklistNames = new List<string>();
-
-
-
-         //   var selectedEntity = lvEntities.SelectedItems[0].Tag.ToString();
-            string entityCollectionName = MetadataHelper.RetrieveEntity(CurrentEntityMetadataWithItems.LogicalName, Service).LogicalCollectionName;
-            string step1 = string.Format(@"let
-    Source = OData.Feed(ServiceRootUrl),
-    entity_table = Source{{[Name = ""{0}"", Signature = ""table""]}}[Data],", entityCollectionName);
-
-            string selectedColumns = "";
-
-            string renameColumns = "";
-
-            foreach (ListViewItem listItem in listViewSelectedFields.Items)
+            else
             {
-                if (selectedColumns == "")
-                {
-                    selectedColumns = string.Format(@"""{0}""", listItem.Tag);
-                    renameColumns = string.Format(@"{{""{0}"",""{1}""}}", listItem.Tag, listItem.Text);
-                }
-                else
-                {
-                    selectedColumns = string.Format(@"{0},""{1}""", selectedColumns, listItem.Tag);
-                    renameColumns = string.Format(@"{0},{{""{1}"",""{2}""}}", renameColumns, listItem.Tag, listItem.Text);
-                }
-
-
-
-                var fieldMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == listItem.Tag.ToString()).FirstOrDefault();
-
-
-                if (fieldMetadata != null)
-                {
-                    if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata))
-                    {
-                        GenerateLocalOptionSet(fieldMetadata);
-                    }
-                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata))
-                    {
-                        GenerateStatusOptionSet(fieldMetadata);
-                    }
-                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata))
-                    {
-                        GenerateStateOptionSet(fieldMetadata);
-                    }
-                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.EnumAttributeMetadata))
-                    {
-                        GenerateEnumOptionSet(fieldMetadata);
-                    }
-                }
-
-
+                tsbGenerateFechXml.Visible = false;
+                tsbUpdateFetchXml.Visible = true;
             }
-            string step2 = string.Format(@"    #""Removed Other Columns"" = Table.SelectColumns(entity_table,{{{0}}}),", selectedColumns);
+
+
+        }
+
+        private void tsbGenerateOData_Click(object sender, EventArgs eventArgs)
+        {
+            ClearODataResultTab();
             
-            string step3 = string.Format(@"    #""Renamed Columns"" = Table.RenameColumns( #""Removed Other Columns"",{{{0}}})", renameColumns);
-            string lastStep = @"in #""Renamed Columns""";
-            
-            var finalMainQuery = step1 + "\n" + step2 + "\n" + step3 + "\n" + lastStep;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Generating OData Query...",
+                Work = (bw, e) =>
+                {
+                    e.Result =   GeneratePowerBIODataQuery();
+                },
+                PostWorkCallBack = e =>
+                {
+                    if (e.Error != null)
+                    {
+                        string errorMessage = CrmExceptionHelper.GetErrorMessage(e.Error, true);
+                        CommonDelegates.DisplayMessageBox(ParentForm, errorMessage, "Error", MessageBoxButtons.OK,
+                                                          MessageBoxIcon.Error);
+                    }
+                    else
+                    {
+                        string finalMainQuery = (string)e.Result;
 
-
-            CreateTabPage("tabPageMainQuery", $"Main Query ({CurrentEntityMetadataWithItems.DisplayName.UserLocalizedLabel.Label}) - ({CurrentEntityMetadataWithItems.LogicalName})", "txt_tabPageMainQuery", finalMainQuery);
-
-
-
-            tabControlResult.Refresh();
+                        CreateTabPage(tabODataResult, "tabPageMainQuery", $"Main Query ({CurrentEntityMetadataWithItems.DisplayName.UserLocalizedLabel.Label}) - ({CurrentEntityMetadataWithItems.LogicalName})", "txt_tabPageMainQuery", finalMainQuery);
+                        
+                        tabMain.SelectedTab = tabPageFinalResult;
+                    }
+                }
+            });
         }
 
-        private void GenerateSeviceURL()
+        private void CreateTabPage(TabControl tabControl,string tabPageName, string tabPageText, string textBoxFieldName, string queryString)
         {
 
-            RetrieveCurrentOrganizationResponse retrieveCurrentOrganizationResponse = (RetrieveCurrentOrganizationResponse)base.Service.Execute(new RetrieveCurrentOrganizationRequest());
-            string arg = ((DataCollection<Microsoft.Xrm.Sdk.Organization.EndpointType, string>)retrieveCurrentOrganizationResponse.Detail.Endpoints)[Microsoft.Xrm.Sdk.Organization.EndpointType.WebApplication];
-            Version version = Version.Parse(retrieveCurrentOrganizationResponse.Detail.OrganizationVersion);
-           // string ServiceAPIURL = $"{arg}api/data/v{version.ToString(2)}";
-            string ServiceAPIURL = $"{arg}api/data/v8.2";
-
-            
-            CreateTabPage($"tabPageServiceRootURL", $"ServiceRootURL", $"txt_tabPageServiceRootURL", ServiceAPIURL);
-
-        }
-
-        private void GenerateEnumOptionSet(AttributeMetadata attributeMetadata)
-        {
-            
-            string str =
-$@"let
-    Source = Json.Document(Web.Contents(ServiceRootUrl & ""/GlobalOptionSetDefinitions({attributeMetadata.MetadataId.Value.ToString()})"")),
-    Options = Source[Options],
-    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Label"", ""Value""}}, {{""Label"", ""Value""}}),
-    #""Expanded Column1.Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded Column1.Label.UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Column1.Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Budget""}})
-in
-    #""Expanded Column1.Label.UserLocalizedLabel""";
-
-            CreateTabPage($"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
-        }
-
-        private void GenerateStateOptionSet(AttributeMetadata attributeMetadata)
-        {
-            string str =
-$@"let
-    Source = Json.Document(Web.Contents(ServiceRootUrl & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.StateAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
-    OptionSet = Source[OptionSet],
-    Options = OptionSet[Options],
-    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
-    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
-    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
-    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
-in
-    #""Renamed Columns""";
-
-            CreateTabPage($"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
-        }
-        private void GenerateStatusOptionSet(AttributeMetadata attributeMetadata)
-        {
-            string str = $@"let
-    Source = Json.Document(Web.Contents(ServiceRootUrl & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.StatusAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
-    OptionSet = Source[OptionSet],
-    Options = OptionSet[Options],
-    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
-    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
-    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
-    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
-in
-    #""Renamed Columns""";
-
-            CreateTabPage($"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
-        }
-
-
-        private void CreateTabPage(string tabPageName, string tabPageText, string textBoxFieldName, string queryString)
-        {
-
-            if (!tabControlResult.TabPages.ContainsKey(tabPageName))
+            if (!tabControl.TabPages.ContainsKey(tabPageName))
             {
                 TabPage tabPage = new TabPage();
                 tabPage.Name = tabPageName;
@@ -736,13 +638,13 @@ in
                 txtMainQuery.Name = textBoxFieldName;
                 txtMainQuery.Dock = DockStyle.Fill;
                 tabPage.Controls.Add(txtMainQuery);
-                tabControlResult.TabPages.Add(tabPage);
+                tabControl.TabPages.Add(tabPage);
 
                 txtMainQuery.Text = queryString;
             }
             else
             {
-                TabPage tapPageMainQuery = tabControlResult.TabPages[tabPageName];
+                TabPage tapPageMainQuery = tabControl.TabPages[tabPageName];
 
                 foreach (Control control in tapPageMainQuery.Controls)
                 {
@@ -757,29 +659,238 @@ in
                 }
             }
         }
-
-        private void GenerateLocalOptionSet(AttributeMetadata attributeMetadata)
+        
+        void AddItemToSelectedAttributeslistView( PowerQueryAttribute _powerQueryAttribute)
         {
-            string str =
- $@"let
-    Source = Json.Document(Web.Contents(ServiceRootUrl & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
-    OptionSet = Source[OptionSet],
-    Options = OptionSet[Options],
-    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
-    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
-    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
-    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
-    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
-    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
-in
-    #""Renamed Columns""";
+            //listViewSelectedFields
+            bool canAddField = true;
+            foreach (ListViewItem item in selectedAttributesListViewItemCache)
+            {
+                if (((PowerQueryAttribute)item.Tag).Name == _powerQueryAttribute.Name)
+                {
+                    canAddField = false;
+                }
+            }
+            if (canAddField)
+            {
+                var selectedFieldItem = new ListViewItem { Text = _powerQueryAttribute.DisplayName, Tag = _powerQueryAttribute };
+                selectedFieldItem.SubItems.Add(_powerQueryAttribute.Name);
+                selectedFieldItem.SubItems.Add(_powerQueryAttribute.Type);
+                selectedAttributesListViewItemCache.Add(selectedFieldItem);
+            }
+            listViewSelectedFields.Items.Clear();
+            listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
 
-            CreateTabPage($"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
+
         }
         
+        private void tabODataResult_ControlAdded(object sender, ControlEventArgs e)
+        {
+        }
+        void EnableVisableListViewSelectedFields()
+        {
+
+            bool isVisable = false;
+
+            if (listViewSelectedFields.Items.Count > 0)
+            {
+                isVisable = true;
+            }
 
 
+            listViewSelectedFields.Enabled = isVisable;
+            tsbGenerateOData.Enabled = isVisable;
+            tsbUpdateFetchXml.Enabled = isVisable;
+            tsbGenerateFechXml.Enabled = isVisable;
+            toolStripButtonGenerateServiceRootURL.Enabled = isVisable;
+            toolStripButtonOptionSet.Enabled = isVisable;
+        }
+
+        private void tsbGenerateFechXml_Click(object sender, EventArgs eventArgs)
+        {
+
+            FetchXmlQuery fetchXmlQuery = new FetchXmlQuery(CurrentEntityMetadataWithItems, listViewFetchXmlConfig.Items.Cast<ListViewItem>().Select(e => (PowerQueryAttribute)e.Tag).ToList());
+            fetchXmlQuery.FilterXml = FilterXml;
+
+            string msg = fetchXmlQuery.Validate();
+
+            if (string.IsNullOrEmpty(msg))
+            {
+                CreateTabPage(tabFetchXmlResult, "tabPageMainQuery", $"Main Query ({CurrentEntityMetadataWithItems.DisplayName.UserLocalizedLabel.Label}) - ({CurrentEntityMetadataWithItems.LogicalName})", "txt_tabPageMainQuery", fetchXmlQuery.FetchXmlQueryString);
+                tabFetchXmlResult.SelectedIndex = 1;
+            }
+            else
+            {
+                MessageBox.Show(msg);
+            }
+
+
+
+            //WorkAsync(new WorkAsyncInfo
+            //{
+            //    Message = "Generating FetchXml Query...",
+            //    Work = (bw, e) =>
+            //    {
+            //        FetchXmlQuery fetchXmlQuery = new FetchXmlQuery(CurrentEntityMetadataWithItems, listViewFetchXmlConfig.Items.Cast<ListViewItem>().Select(e => (PowerQueryAttribute)e.Tag).ToList());
+            //        e.Result = fetchXmlQuery;
+            //    },
+            //    PostWorkCallBack = e =>
+            //    {
+            //        if (e.Error != null)
+            //        {
+            //            string errorMessage = CrmExceptionHelper.GetErrorMessage(e.Error, true);
+            //            CommonDelegates.DisplayMessageBox(ParentForm, errorMessage, "Error", MessageBoxButtons.OK,
+            //                                              MessageBoxIcon.Error);
+            //        }
+            //        else
+            //        {
+            //            string finalMainQuery = (string)e.Result;
+            //        }
+            //    }
+            //});
+
+        }
+
+        //private void listViewFetchXmlConfig_AddFormattedValue()
+        //{
+
+        //    foreach (ListViewItem item in listViewFetchXmlConfig.CheckedItems)
+        //    {
+        //        var powerQueryAttribute = (PowerQueryAttribute)item.Tag;
+
+        //        if (powerQueryAttribute.AttributeMetadata != null && powerQueryAttribute.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata && !powerQueryAttribute.Name.StartsWith("_") && !powerQueryAttribute.Name.Contains(".") && !powerQueryAttribute.Name.Contains("@"))
+        //        {
+
+        //            var fieldGuidName = $"_{powerQueryAttribute.Name}_value";
+        //            var lookupLogicalName = $"_{powerQueryAttribute.Name}_value@Microsoft.Dynamics.CRM.lookuplogicalname";
+
+        //            PowerQueryAttribute guidPowerQueryAttribute = new PowerQueryAttribute();
+        //            guidPowerQueryAttribute.ParentPowerQueryAttribute = powerQueryAttribute;
+        //            guidPowerQueryAttribute.Name = fieldGuidName;
+        //            guidPowerQueryAttribute.DisplayName = powerQueryAttribute.DisplayName + " - GUID";
+
+
+
+        //            var fieldNameFormated = $"{fieldGuidName}@OData.Community.Display.V1.FormattedValue";
+
+        //        }
+        //    }
+
+        //}
+
+        private void txtSearchEntity_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+
+        private void listViewSelectedFields_SelectedIndexChanged(object sender, EventArgs e)
+        {
+
+        }
+        private void toolStripButtonOptionSet_Click(object sender, EventArgs e)
+        {
+
+            ClearOptionSetTab();
+
+            GeneratePowerBIOptionSet();
+
+            tabMain.SelectedTab = tabPageOptionSet;
+        }
+        #region Selected Attributes
+
+        #region Selected Attributes ListView
+
+        private void buttonAddToSelectedList_Click(object sender, EventArgs e)
+        {
+            var checkedItems = listViewAllFields.CheckedItems;
+                selectedAttributesListViewItemCache = listViewSelectedFields.Items.Cast<ListViewItem>().ToList();
+
+            foreach (ListViewItem item in checkedItems)
+            {
+                var powerQueryAttribute = (PowerQueryAttribute)item.Tag;
+                bool canAddItem = true;
+                foreach (var selectedAttribute in selectedAttributesListViewItemCache)
+                {
+                    var selectedPowerQueryAttribute = (PowerQueryAttribute)selectedAttribute.Tag;
+                    if (powerQueryAttribute.DisplayName == selectedPowerQueryAttribute.DisplayName)
+                    {
+                    //    MessageBox.Show("Can not add two attributes with the same name");
+                        canAddItem = false;
+                    }
+                }
+
+                if (canAddItem)
+                {
+                    selectedAttributesListViewItemCache.Add((ListViewItem)item.Clone());
+                }
+            }
+
+            listViewSelectedFields.Items.Clear();
+            ClearTabs();
+            listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
+
+            RefreshAllAttributesList();
+            EnableVisableListViewSelectedFields();
+        }
+
+
+        #region Select All Selected Attributes ListView
+
+        private void listViewSelectedFields_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+        {
+
+            if ((e.ColumnIndex == 0))
+            {
+                CheckBox cck = new CheckBox();
+                // With...
+                Text = "";
+                Visible = true;
+                listViewSelectedFields.SuspendLayout();
+                e.DrawBackground();
+                cck.BackColor = Color.Transparent;
+                cck.UseVisualStyleBackColor = true;
+
+                cck.SetBounds(e.Bounds.X, e.Bounds.Y, cck.GetPreferredSize(new Size(e.Bounds.Width, e.Bounds.Height)).Width, cck.GetPreferredSize(new Size(e.Bounds.Width, e.Bounds.Height)).Width);
+                cck.Size = new Size((cck.GetPreferredSize(new Size((e.Bounds.Width - 1), e.Bounds.Height)).Width + 1), e.Bounds.Height);
+                cck.Location = new Point(3, 0);
+                listViewSelectedFields.Controls.Add(cck);
+                cck.Show();
+                cck.BringToFront();
+                e.DrawText((TextFormatFlags.VerticalCenter | TextFormatFlags.Left));
+                cck.Click += new EventHandler(listViewSelectedFields_Bink);
+                listViewSelectedFields.ResumeLayout(true);
+            }
+            else
+            {
+                e.DrawDefault = true;
+            }
+        }
+
+        private void listViewSelectedFields_DrawItem(object sender, DrawListViewItemEventArgs e)
+        {
+            e.DrawDefault = true;
+        }
+
+        private void listViewSelectedFields_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+
+            e.DrawDefault = true;
+        }
+
+        private void listViewSelectedFields_Bink(object sender, System.EventArgs e)
+        {
+            CheckBox test = sender as CheckBox;
+
+            for (int i = 0; i < listViewSelectedFields.Items.Count; i++)
+            {
+                listViewSelectedFields.Items[i].Checked = test.Checked;
+            }
+        }
+        #endregion
+
+
+        #region DragDrop Selected Attributes ListView
         // The LVItem being dragged
         private ListViewItem _itemDnD = null;
         private void listViewSelectedFields_MouseDown(object sender, MouseEventArgs e)
@@ -787,6 +898,10 @@ in
 
             _itemDnD = listViewSelectedFields.GetItemAt(e.X, e.Y);
             // if the LV is still empty, no item will be found anyway, so we don't have to consider this case
+        }
+        private void listViewSelectedFields_DragDrop(object sender, DragEventArgs e)
+        {
+            EnableVisableListViewSelectedFields();
         }
 
         private void listViewSelectedFields_MouseMove(object sender, MouseEventArgs e)
@@ -884,134 +999,859 @@ in
 
         private void listViewSelectedFields_DoubleClick(object sender, EventArgs eventArgs)
         {
-            var firstSelectedItem = listViewSelectedFields.SelectedItems[0];
 
-            var attributeLogicName = firstSelectedItem.Tag.ToString();
+            var firstSelectedItem = listViewSelectedFields.SelectedItems[0];
+            var currentPowerQueryAttribute = ((PowerQueryAttribute)firstSelectedItem.Tag);
+            var attributeLogicName = currentPowerQueryAttribute.Name;
 
             var attributeDisplayName = firstSelectedItem.Text;
-
-            AttributeFormMessage attributeFormMessage = new AttributeFormMessage();
-            attributeFormMessage.AttributeLogicName = attributeLogicName;
-            attributeFormMessage.EntityMetadataWithItems = CurrentEntityMetadataWithItems;
-            attributeFormMessage.CurrentAttributeDisplayName = attributeDisplayName;
             var attributeMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == attributeLogicName).FirstOrDefault();
 
 
-            if (attributeMetadata != null)
-            {
-                if (attributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata)
-                {
-                    var fieldGuidName = $"_{attributeFormMessage.AttributeLogicName}_value";
 
-                    bool canAddGuidField = true;
-                   foreach(ListViewItem item in listViewSelectedFields.Items)
+            //if (attributeMetadata != null && attributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata && !attributeLogicName.StartsWith("_") && !attributeLogicName.Contains("."))
+            //{
+            //    LookupFormMessage lookupFormMessage = new LookupFormMessage(currentPowerQueryAttribute);
+            //    //lookupFormMessage.EntityMetadataWithItems = CurrentEntityMetadataWithItems;
+
+
+            //    var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
+            //    var lookupGuidPowerQueryAttribute = FetchXmlQueryHelper.LookupGuidPowerQueryAttribute(currentPowerQueryAttribute);
+            //    var logicalLookupPowerQueryAttribute = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(currentPowerQueryAttribute);
+            //    bool canAddGuidField = true;
+            //    bool canAddLookupLogicalName = true;
+            //    bool canAddFormattedName = true;
+            //    foreach (ListViewItem item in listViewFetchXmlConfig.Items)
+            //    {
+            //        if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
+            //        {
+            //            canAddGuidField = false;
+            //        }
+            //        if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
+            //        {
+            //            canAddLookupLogicalName = false;
+            //        }
+            //        if (((PowerQueryAttribute)item.Tag).Name == formattedPowerQueryAttribute.Name)
+            //        {
+            //            canAddFormattedName = false;
+            //        }
+            //    }
+            //    lookupFormMessage.CanAddLookupGuid = canAddGuidField;
+            //    lookupFormMessage.CanAddLookupLogicalName = canAddLookupLogicalName;
+
+            //    lookupFormMessage.CanAddFormattedValue = canAddFormattedName;
+
+            //    using (var form = new AttributeLookupForm(lookupFormMessage))
+            //    {
+            //        var result = form.ShowDialog();
+            //        if (result == DialogResult.OK)
+            //        {
+            //            var attributeFormResponse = form.attributeFormResponse;
+
+            //            foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
+            //            {
+            //                //todo
+            //                AddFetchXmlAttributeslistView(powerQueryAttribute);
+            //            }
+            //            listViewFetchXmlConfig.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
+            //            listViewFetchXmlConfig.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
+            //        }
+            //    }
+            //}
+            //else
+            {
+
+                AttributeFormMessage attributeFormMessage = new AttributeFormMessage(currentPowerQueryAttribute);
+
+
+
+                //bool canAddFormattedValueField = true;
+
+                //var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
+
+                //if (formattedPowerQueryAttribute != null)
+                //{
+                //    foreach (ListViewItem item in listViewFetchXmlConfig.Items)
+                //    {
+                //        var itemPowerQueryAttribute = (PowerQueryAttribute)item.Tag;
+                //        if (itemPowerQueryAttribute.Name == formattedPowerQueryAttribute.Name
+                //            || currentPowerQueryAttribute.Type == "FormattedValue"
+                //            || currentPowerQueryAttribute.Name.StartsWith("_")
+                //            || currentPowerQueryAttribute.Name.Contains("@"))
+                //        {
+                //            canAddFormattedValueField = false;
+                //            break;
+                //        }
+                //    }
+                //}
+                //else
+                //{
+                //    canAddFormattedValueField = false;
+                //}
+                attributeFormMessage.CanAddFormattedValue = false;// canAddFormattedValueField;
+
+
+
+                using (var form = new AttributeForm(attributeFormMessage))
+                {
+                    var result = form.ShowDialog();
+                    if (result == DialogResult.OK)
                     {
-                        if(item.Tag.ToString() == fieldGuidName)
+                        var attributeFormResponse = form.attributeFormResponse;
+                        //foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
+                        //{
+                        //    AddFetchXmlAttributeslistView(powerQueryAttribute);
+                        //}
+                        listViewSelectedFields.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
+
+                        listViewSelectedFields.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
+                    }
+                }
+            }
+
+        }
+        #endregion
+        #endregion
+
+        #endregion
+        #region All Attribute
+
+        private void RefreshAllAttributesList()
+        {
+            List<ListViewItem> allAttributesList = new List<ListViewItem>(allAttributesListViewItemCache);
+
+
+            foreach (ListViewItem selectedItem in listViewSelectedFields.Items)
+            {
+                var selectedItemPowerQueryAttribute = (PowerQueryAttribute)selectedItem.Tag;
+
+                for (int i = allAttributesList.Count - 1; i >= 0; i--)
+                {
+
+                    var attributePowerQueryAttribute = (PowerQueryAttribute)allAttributesList[i].Tag;
+                    if (attributePowerQueryAttribute.Name == selectedItemPowerQueryAttribute.Name)
+                    {
+                        allAttributesList.RemoveAt(i);
+                    }
+                }
+            }
+            List<ListViewItem> allAttributesListTmp = new List<ListViewItem>(allAttributesList);
+
+            foreach (ListViewItem selectedItem in allAttributesListTmp)
+            {
+                var powerQueryAttribute = (PowerQueryAttribute)selectedItem.Tag;
+                if (!powerQueryAttribute.Name.Contains(textBoxAllAttributeFilter.Text))
+                {
+                    allAttributesList.Remove(selectedItem);
+                }
+            }
+
+            listViewAllFields.Items.Clear();
+
+            listViewAllFields.Items.AddRange(allAttributesList.ToArray());
+
+
+        }
+
+        private void FillAttributes()
+        {
+            var entityMetaData = CurrentEntityMetadataWithItems;
+
+            listViewAllFields.Items.Clear();
+            listViewSelectedFields.Items.Clear();
+            textBoxAllAttributeFilter.Text = "";
+
+            List<ListViewItem> listItems = new List<ListViewItem>();
+            foreach (var attribute in entityMetaData.Attributes)
+            {
+                if (attribute.IsValidForAdvancedFind.Value)
+                {
+
+
+                    bool canAddField = true;
+                    foreach (ListViewItem item in listViewAllFields.Items)
+                    {
+                        if (((PowerQueryAttribute)item.Tag).Name == attribute.LogicalName)
                         {
-                            canAddGuidField = false;
+                            canAddField = false;
                         }
                     }
-                    attributeFormMessage.CanAddLookupGuid = canAddGuidField;
-                }
-            }
-
-            using (var form = new AttributeForm(attributeFormMessage))
-            {
-                var result = form.ShowDialog();
-                if (result == DialogResult.OK)
-                {
-                    var attributeFormResponse = form.attributeFormResponse;
-
-                    foreach(string itemName in attributeFormResponse.NewFields)
+                    if (canAddField)
                     {
-                        AddItemTolistView(listViewSelectedFields, itemName, itemName,"Guid");
+                        PowerQueryAttribute powerQueryAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(attribute);
+
+                        if (powerQueryAttribute.CanBeAdded)
+                        {
+                            listItems.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(powerQueryAttribute));
+                        }
                     }
-                    listViewSelectedFields.SelectedItems[0].Text = attributeFormResponse.CurrentAttributeDisplayName;
                 }
+
+            }
+
+            allAttributesListViewItemCache = listItems;
+            listViewAllFields.Items.Clear();
+            listViewAllFields.Items.AddRange(allAttributesListViewItemCache.ToArray());
+            selectedAttributesListViewItemCache = new List<ListViewItem>();
+            listViewSelectedFields.Items.Clear();
+            listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
+        }
+        private void listViewAllFields_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
+        {
+            if ((e.ColumnIndex == 0))
+            {
+                CheckBox cck = new CheckBox();
+                // With...
+                Text = "";
+                Visible = true;
+                listViewAllFields.SuspendLayout();
+                e.DrawBackground();
+                cck.BackColor = Color.Transparent;
+                cck.UseVisualStyleBackColor = true;
+
+                cck.SetBounds(e.Bounds.X, e.Bounds.Y, cck.GetPreferredSize(new Size(e.Bounds.Width, e.Bounds.Height)).Width, cck.GetPreferredSize(new Size(e.Bounds.Width, e.Bounds.Height)).Width);
+                cck.Size = new Size((cck.GetPreferredSize(new Size((e.Bounds.Width - 1), e.Bounds.Height)).Width + 1), e.Bounds.Height);
+                cck.Location = new Point(3, 0);
+                listViewAllFields.Controls.Add(cck);
+                cck.Show();
+                cck.BringToFront();
+                e.DrawText((TextFormatFlags.VerticalCenter | TextFormatFlags.Left));
+                cck.Click += new EventHandler(listViewAllFields_Bink);
+                listViewAllFields.ResumeLayout(true);
+            }
+            else
+            {
+                e.DrawDefault = true;
             }
         }
 
-        void MoveItemFormListViewToAnother(ListView fromListView, ListView toListView, string attributeLogicalName)
+        private void listViewAllFields_DrawItem(object sender, DrawListViewItemEventArgs e)
         {
-            var listViewItem = RemoveItemlistView(fromListView, attributeLogicalName);
+            e.DrawDefault = true;
 
-            AddItemTolistView(toListView, listViewItem);
         }
 
+        private void listViewAllFields_Bink(object sender, System.EventArgs e)
+        {
+            CheckBox test = sender as CheckBox;
 
-        void AddItemTolistView(ListView _listView, string itemName, string itemDisplayName, string type)
+            for (int i = 0; i < listViewAllFields.Items.Count; i++)
+            {
+                listViewAllFields.Items[i].Checked = test.Checked;
+            }
+        }
+
+        private void listViewAllFields_DrawSubItem(object sender, DrawListViewSubItemEventArgs e)
+        {
+            e.DrawDefault = true;
+
+        }
+        private void textBoxAllAttributeFilter_KeyUp(object sender, KeyEventArgs e)
+        {
+            RefreshAllAttributesList();
+        }
+        private void textBoxAllAttributeFilter_TextChanged(object sender, EventArgs e)
         {
 
-            bool canAddField = true;
-            foreach (ListViewItem item in _listView.Items)
+            RefreshAllAttributesList();
+        }
+        #endregion
+        #region OData
+
+        private void ClearODataResultTab()
+        {
+            //  return;
+            foreach (TabPage tapPage in tabODataResult.TabPages)
             {
-                if (item.Tag.ToString() == itemName)
+                tabODataResult.TabPages.Remove(tapPage);
+            }
+        }
+        string GeneratePowerBIODataQuery()
+        {
+
+            List<string> picklistNames = new List<string>();
+
+
+
+            //   var selectedEntity = lvEntities.SelectedItems[0].Tag.ToString();
+            string entityCollectionName = MetadataHelper.RetrieveEntity(CurrentEntityMetadataWithItems.LogicalName, Service).LogicalCollectionName;
+            string step1 = string.Format(@"let
+    Source = OData.Feed(ServiceRootURL, null, [Implementation=""2.0""]),
+    entity_table = Source{{[Name = ""{0}"", Signature = ""table""]}}[Data],", entityCollectionName);
+
+
+
+            string selectedColumns = "";
+
+            string renameColumns = "";
+
+            foreach (ListViewItem listItem in listViewSelectedFields.Items)
+            {
+                var currentPowerQueryAttribute = (PowerQueryAttribute)listItem.Tag;
+                if (!currentPowerQueryAttribute.Name.Contains("@"))
+                {
+                    if (selectedColumns == "")
+                    {
+                        selectedColumns = currentPowerQueryAttribute.ODataAttributeDetail.PowerBISelectColumnValue;// string.Format(@"""{0}""", currentPowerQueryAttribute.Name);
+                        renameColumns = currentPowerQueryAttribute.ODataAttributeDetail.PowerBIRenameColumnValue; //string.Format(@"{{""{0}"",""{1}""}}", currentPowerQueryAttribute.Name, currentPowerQueryAttribute.DisplayName);
+                    }
+                    else
+                    {
+                        selectedColumns = string.Format(@"{0},{1}", selectedColumns, currentPowerQueryAttribute.ODataAttributeDetail.PowerBISelectColumnValue);
+                        renameColumns = string.Format(@"{0},{1}", renameColumns, currentPowerQueryAttribute.ODataAttributeDetail.PowerBIRenameColumnValue);
+                    }
+
+
+
+                }
+
+
+            }
+            string step2 = string.Format(@"    #""Removed Other Columns"" = Table.SelectColumns(entity_table,{{{0}}}),", selectedColumns);
+
+            string step3 = string.Format(@"    #""Renamed Columns"" = Table.RenameColumns( #""Removed Other Columns"",{{{0}}})", renameColumns);
+            string lastStep = @"in #""Renamed Columns""";
+
+            var finalMainQuery = step1 + "\n" + step2 + "\n" + step3 + "\n" + lastStep;
+
+            return finalMainQuery;
+        }
+
+        #endregion
+        #region FechXml
+
+
+        private void buttonGenerateFetchXml_Click(object sender, EventArgs eventArgs)
+        {
+        }
+        void AddFetchXmlAttributeslistView(PowerQueryAttribute _powerQueryAttribute)
+        {
+            //listViewSelectedFields
+            bool canAddField = true;
+            foreach (ListViewItem item in fetchXmlAttributesListViewItemCache)
+            {
+                if (((PowerQueryAttribute)item.Tag).Name == _powerQueryAttribute.Name)
                 {
                     canAddField = false;
                 }
             }
             if (canAddField)
             {
-                var selectedFieldItem = new ListViewItem { Text = itemDisplayName, Tag = itemName };
-                selectedFieldItem.SubItems.Add(itemName);
-                selectedFieldItem.SubItems.Add(type);
-                _listView.Items.Add(selectedFieldItem);
+                var selectedFieldItem = new ListViewItem { Text = _powerQueryAttribute.DisplayName, Tag = _powerQueryAttribute };
+                selectedFieldItem.SubItems.Add(_powerQueryAttribute.Name);
+                selectedFieldItem.SubItems.Add(_powerQueryAttribute.Type);
+                fetchXmlAttributesListViewItemCache.Add(selectedFieldItem);
             }
+            listViewFetchXmlConfig.Items.Clear();
+            listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
+
+
         }
 
-
-        void AddItemTolistView(ListView _listView, ListViewItem _ListViewItem)
+        private void listViewFetchXmlConfig_DoubleClick(object sender, EventArgs eventArgs)
         {
 
+            var firstSelectedItem = listViewFetchXmlConfig.SelectedItems[0];
+            var currentPowerQueryAttribute = ((PowerQueryAttribute)firstSelectedItem.Tag);
+            var attributeLogicName = currentPowerQueryAttribute.Name;
 
-           if(! _listView.Items.Contains(_ListViewItem))
+            var attributeDisplayName = firstSelectedItem.Text;
+            var attributeMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == attributeLogicName).FirstOrDefault();
+
+
+
+            if (attributeMetadata != null && attributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata && !attributeLogicName.StartsWith("_") && !attributeLogicName.Contains("."))
             {
-                _listView.Items.Add(_ListViewItem);
-            }
-        }
-        ListViewItem RemoveItemlistView(ListView _listView, string attributeLogicalName)
-        {
-            ListViewItem removedItem = null;
-            foreach (ListViewItem item in _listView.Items)
-            {
-                if (item.Tag.ToString() == attributeLogicalName)
+                LookupFormMessage lookupFormMessage = new LookupFormMessage(currentPowerQueryAttribute);
+                //lookupFormMessage.EntityMetadataWithItems = CurrentEntityMetadataWithItems;
+
+
+                var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
+                var lookupGuidPowerQueryAttribute = FetchXmlQueryHelper.LookupGuidPowerQueryAttribute(currentPowerQueryAttribute);
+                var logicalLookupPowerQueryAttribute = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(currentPowerQueryAttribute);
+                bool canAddGuidField = true;
+                bool canAddLookupLogicalName = true;
+                bool canAddFormattedName = true;
+                foreach (ListViewItem item in listViewFetchXmlConfig.Items)
                 {
-                    removedItem = item;
-                    _listView.Items.Remove(item);
+                    if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
+                    {
+                        canAddGuidField = false;
+                    }
+                    if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
+                    {
+                        canAddLookupLogicalName = false;
+                    }
+                    if (((PowerQueryAttribute)item.Tag).Name == formattedPowerQueryAttribute.Name)
+                    {
+                        canAddFormattedName = false;
+                    }
+                }
+                lookupFormMessage.CanAddLookupGuid = canAddGuidField;
+                lookupFormMessage.CanAddLookupLogicalName = canAddLookupLogicalName;
+
+                lookupFormMessage.CanAddFormattedValue = canAddFormattedName;
+
+                using (var form = new AttributeLookupForm(lookupFormMessage))
+                {
+                    var result = form.ShowDialog();
+                    if (result == DialogResult.OK)
+                    {
+                        var attributeFormResponse = form.attributeFormResponse;
+
+                        foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
+                        {
+                            AddFetchXmlAttributeslistView(powerQueryAttribute);
+                        }
+                        listViewFetchXmlConfig.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
+                        listViewFetchXmlConfig.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
+                    }
                 }
             }
-            return removedItem;
-        }
-
-        private void tabControlResult_ControlAdded(object sender, ControlEventArgs e)
-        {
-            //if (e.Control.GetType() == typeof(TabPage))
-            //{
-            //    var ff = (TabPage)e.Control;
-            //}
-        }
-
-        private void listViewSelectedFields_ControlAdded(object sender, ControlEventArgs e)
-        {
-            EnableVisableListViewSelectedFields();
-        }
-        void EnableVisableListViewSelectedFields()
-        {
-            bool isVisable = false;
-
-            if (listViewSelectedFields.Items.Count > 0)
+            else
             {
-                isVisable = true;
+
+                AttributeFormMessage attributeFormMessage = new AttributeFormMessage(currentPowerQueryAttribute);
+
+
+
+                bool canAddFormattedValueField = true;
+
+                var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
+
+                if (formattedPowerQueryAttribute != null)
+                {
+                    foreach (ListViewItem item in listViewFetchXmlConfig.Items)
+                    {
+                        var itemPowerQueryAttribute = (PowerQueryAttribute)item.Tag;
+                        if (itemPowerQueryAttribute.Name == formattedPowerQueryAttribute.Name
+                            || currentPowerQueryAttribute.Type == "FormattedValue"
+                            || currentPowerQueryAttribute.Name.StartsWith("_")
+                            || currentPowerQueryAttribute.Name.Contains("@"))
+                        {
+                            canAddFormattedValueField = false;
+                            break;
+                        }
+                    }
+                }else
+                {
+                    canAddFormattedValueField = false;
+                }
+                attributeFormMessage.CanAddFormattedValue = canAddFormattedValueField;
+
+
+
+                using (var form = new AttributeForm(attributeFormMessage))
+                {
+                    var result = form.ShowDialog();
+                    if (result == DialogResult.OK)
+                    {
+                        var attributeFormResponse = form.attributeFormResponse;
+                        foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
+                        {
+                            AddFetchXmlAttributeslistView(powerQueryAttribute);
+                        }
+                        listViewFetchXmlConfig.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
+
+                        listViewFetchXmlConfig.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
+                    }
+                }
+            }
+        }
+
+
+        private void UpdateFetchXmlListView()
+        {
+            //   listViewFetchXmlConfig.Items.Clear();
+            fetchXmlAttributesListViewItemCache = new List<ListViewItem>();
+
+            bool isEntityIdFieldExisted = false;
+            string entityIdFieldExisted = CurrentEntityMetadataWithItems.LogicalName + "id";
+            foreach (ListViewItem item in listViewSelectedFields.Items)
+            {
+                ListViewItem clonedItem = (ListViewItem)item.Clone();
+                var _powerQueryAtt = PowerQueryAttribute.GetNewObject((PowerQueryAttribute) clonedItem.Tag);
+
+                if(entityIdFieldExisted == _powerQueryAtt.Name)
+                {
+                    isEntityIdFieldExisted = true;
+                }
+
+                string displayName = _powerQueryAtt.DisplayName;
+
+                if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.BooleanAttributeMetadata
+                    )
+                {
+                    string displayname = _powerQueryAtt.DisplayName;
+
+                    _powerQueryAtt.DisplayName = _powerQueryAtt.Name;
+                    var _powerQueryAttGuid = FetchXmlQueryHelper.LookupGuidPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                    if (_powerQueryAttGuid != null)
+                    {
+                        fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttGuid));
+                    }
+
+                    if (_powerQueryAtt.Type == "Customer")
+                    {
+                        var _powerQueryAttLogicalName = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                        if (_powerQueryAttLogicalName != null)
+                        {
+                            fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttLogicalName));
+                        }
+                    }
+                        var _powerQueryAttFormatted = FetchXmlQueryHelper.FormattedPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                        if (_powerQueryAttFormatted != null)
+                        {
+                            _powerQueryAttFormatted.DisplayName = displayname;
+                            fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
+                        }
+                }
+                else if (
+                     !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StringAttributeMetadata)
+                     && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                     && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MoneyAttributeMetadata)
+                     && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.IntegerAttributeMetadata)
+                     && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MemoAttributeMetadata)
+                     )
+                {
+
+                    var _powerQueryAttFormatted = FetchXmlQueryHelper.FormattedPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                    if (_powerQueryAttFormatted != null)
+                    {
+                        fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
+
+                    }
+                }
+                if (!(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata))
+                {
+                    if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata
+                    || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.BooleanAttributeMetadata)
+                    {
+                        _powerQueryAtt.DisplayName = displayName + $" ({_powerQueryAtt.Name})";
+                    }
+                    fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAtt));
+                }
+            }
+            //Adding EntityId field
+            if (!isEntityIdFieldExisted)
+            {
+                var idAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == entityIdFieldExisted).FirstOrDefault());
+                if (idAttribute != null)
+                {
+                    fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(idAttribute));
+                }
+            }
+            listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
+        }
+
+        private void linkLabelListViewFetchXmlSelectAll_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            bool isSelectAll = (linkLabelListViewFetchXmlSelectAll.Text == "Select All") ? true : false;
+            foreach (ListViewItem lvi in listViewFetchXmlConfig.Items)
+            {
+                lvi.Checked = isSelectAll;
+            }
+            linkLabelListViewFetchXmlSelectAll.Text = (linkLabelListViewFetchXmlSelectAll.Text == "Select All") ? "Unselect All": "Select All" ;
+
+        }
+
+        private void linkLabelListViewFetchXml_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
+        {
+            fetchXmlAttributesListViewItemCache = new List<ListViewItem>(listViewFetchXmlConfig.Items.Cast<ListViewItem>().ToList());
+
+            foreach (ListViewItem lvi in listViewFetchXmlConfig.CheckedItems)
+            {
+                fetchXmlAttributesListViewItemCache.Remove(lvi);
             }
 
-            listViewSelectedFields.Visible = isVisable;
-            listViewSelectedFields.Enabled = isVisable;
-            tsbGenerate.Enabled = isVisable;
+            ClearFetchXmlTab();
+            listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
+            txtFilterXml.Text = FilterXml;
+        }
+        private void ClearFetchXmlTab()
+        {
+            listViewFetchXmlConfig.Items.Clear();
+
+            txtFilterXml.Text = "";
+
+            foreach (TabPage tapPage in tabFetchXmlResult.TabPages)
+            {
+                if (tapPage.Text != "FetchXml Config")
+                {
+                    tabFetchXmlResult.TabPages.Remove(tapPage);
+                }
+            }
+        }
+        #region FetchXml Listview DragDrop
+
+        private void listViewFetchXmlConfig_MouseDown(object sender, MouseEventArgs e)
+        {
+
+            _itemDnD = listViewFetchXmlConfig.GetItemAt(e.X, e.Y);
         }
 
-        private void listViewSelectedFields_DragDrop(object sender, DragEventArgs e)
+        private void listViewFetchXmlConfig_MouseMove(object sender, MouseEventArgs e)
         {
-            EnableVisableListViewSelectedFields();
+
+            if (_itemDnD == null)
+                return;
+
+            // Show the user that a drag operation is happening
+            Cursor = Cursors.Hand;
+
+            // calculate the bottom of the last item in the LV so that you don't have to stop your drag at the last item
+            int lastItemBottom = Math.Min(e.Y, listViewFetchXmlConfig.Items[listViewFetchXmlConfig.Items.Count - 1].GetBounds(ItemBoundsPortion.Entire).Bottom - 1);
+
+            // use 0 instead of e.X so that you don't have to keep inside the columns while dragging
+            ListViewItem itemOver = listViewFetchXmlConfig.GetItemAt(0, lastItemBottom);
+
+            if (itemOver == null)
+                return;
+
+            Rectangle rc = itemOver.GetBounds(ItemBoundsPortion.Entire);
+            if (e.Y < rc.Top + (rc.Height / 2))
+            {
+                listViewFetchXmlConfig.LineBefore = itemOver.Index;
+                listViewFetchXmlConfig.LineAfter = -1;
+            }
+            else
+            {
+                listViewFetchXmlConfig.LineBefore = -1;
+                listViewFetchXmlConfig.LineAfter = itemOver.Index;
+            }
+
+            // invalidate the LV so that the insertion line is shown
+            listViewFetchXmlConfig.Invalidate();
+        }
+
+        private void listViewFetchXmlConfig_MouseUp(object sender, MouseEventArgs e)
+        {
+
+
+            if (_itemDnD == null)
+                return;
+
+            try
+            {
+                // calculate the bottom of the last item in the LV so that you don't have to stop your drag at the last item
+                int lastItemBottom = Math.Min(e.Y, listViewFetchXmlConfig.Items[listViewFetchXmlConfig.Items.Count - 1].GetBounds(ItemBoundsPortion.Entire).Bottom - 1);
+
+                // use 0 instead of e.X so that you don't have to keep inside the columns while dragging
+                ListViewItem itemOver = listViewFetchXmlConfig.GetItemAt(0, lastItemBottom);
+
+                if (itemOver == null)
+                    return;
+
+                Rectangle rc = itemOver.GetBounds(ItemBoundsPortion.Entire);
+
+                // find out if we insert before or after the item the mouse is over
+                bool insertBefore;
+                if (e.Y < rc.Top + (rc.Height / 2))
+                {
+                    insertBefore = true;
+                }
+                else
+                {
+                    insertBefore = false;
+                }
+
+                if (_itemDnD != itemOver) // if we dropped the item on itself, nothing is to be done
+                {
+                    if (insertBefore)
+                    {
+                        listViewFetchXmlConfig.Items.Remove(_itemDnD);
+                        listViewFetchXmlConfig.Items.Insert(itemOver.Index, _itemDnD);
+                    }
+                    else
+                    {
+                        listViewFetchXmlConfig.Items.Remove(_itemDnD);
+                        listViewFetchXmlConfig.Items.Insert(itemOver.Index + 1, _itemDnD);
+                    }
+                }
+
+                // clear the insertion line
+                listViewFetchXmlConfig.LineAfter =
+                listViewFetchXmlConfig.LineBefore = -1;
+
+                listViewFetchXmlConfig.Invalidate();
+
+            }
+            finally
+            {
+                // finish drag&drop operation
+                _itemDnD = null;
+                Cursor = Cursors.Default;
+            }
+        }
+        #endregion
+        #endregion
+        #region ServiceURL
+
+        private void GenerateSeviceURL(TabControl tabControl)
+        {
+            RetrieveCurrentOrganizationResponse retrieveCurrentOrganizationResponse = (RetrieveCurrentOrganizationResponse)base.Service.Execute(new RetrieveCurrentOrganizationRequest());
+            string arg = ((DataCollection<Microsoft.Xrm.Sdk.Organization.EndpointType, string>)retrieveCurrentOrganizationResponse.Detail.Endpoints)[Microsoft.Xrm.Sdk.Organization.EndpointType.WebApplication];
+            Version version = Version.Parse(retrieveCurrentOrganizationResponse.Detail.OrganizationVersion);
+            // string ServiceAPIURL = $"{arg}api/data/v{version.ToString(2)}";
+
+            string versionVal = version.ToString(2);// (version.ToString(2) == "9.0") ? "8.2" : version.ToString(2);
+            string ServiceAPIURL = $"{arg}api/data/v{versionVal}";
+
+
+
+            CreateTabPage(tabControl, $"tabPageServiceRootURL", $"ServiceRootURL", $"txt_tabPageServiceRootURL", ServiceAPIURL);
+
+        }
+
+
+        private void toolStripButtonGenerateServiceRootURL_Click(object sender, EventArgs e)
+        {
+
+            ClearServiceRootURLTab();
+
+            GeneratePowerBIServiceRootURL();
+
+            tabMain.SelectedTab = tabPageServiceRootURL;
+        }
+        private void GeneratePowerBIServiceRootURL()
+        {
+            GenerateSeviceURL(tabControlServiceRootURL);
+        }
+        private void ClearServiceRootURLTab()
+        {
+            foreach (TabPage tapPage in tabControlServiceRootURL.TabPages)
+            {
+                tabControlServiceRootURL.TabPages.Remove(tapPage);
+            }
+        }
+        #endregion
+        #region OptionSet
+
+        private void GenerateEnumOptionSet(TabControl _tabControl, AttributeMetadata attributeMetadata)
+        {
+
+            string str =
+$@"let
+    Source = Json.Document(Web.Contents(ServiceRootURL & ""/GlobalOptionSetDefinitions({attributeMetadata.MetadataId.Value.ToString()})"")),
+    Options = Source[Options],
+    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Label"", ""Value""}}, {{""Label"", ""Value""}}),
+    #""Expanded Column1.Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded Column1.Label.UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Column1.Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Budget""}})
+in
+    #""Expanded Column1.Label.UserLocalizedLabel""";
+
+            CreateTabPage(_tabControl, $"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
+        }
+        private void GenerateStateOptionSet(TabControl _tabControl, AttributeMetadata attributeMetadata)
+        {
+            string str =
+$@"let
+    Source = Json.Document(Web.Contents(ServiceRootURL & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.StateAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
+    OptionSet = Source[OptionSet],
+    Options = OptionSet[Options],
+    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
+    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
+    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
+    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
+in
+    #""Renamed Columns""";
+
+            CreateTabPage(_tabControl, $"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
+        }
+        private void GenerateStatusOptionSet(TabControl _tabControl, AttributeMetadata attributeMetadata)
+        {
+            string str = $@"let
+    Source = Json.Document(Web.Contents(ServiceRootURL & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.StatusAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
+    OptionSet = Source[OptionSet],
+    Options = OptionSet[Options],
+    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
+    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
+    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
+    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
+in
+    #""Renamed Columns""";
+
+            CreateTabPage(_tabControl, $"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
+        }
+
+        private void GenerateLocalOptionSet(TabControl _tabControl, AttributeMetadata attributeMetadata)
+        {
+            string str =
+ $@"let
+    Source = Json.Document(Web.Contents(ServiceRootURL & ""/EntityDefinitions(LogicalName='{CurrentEntityMetadataWithItems.LogicalName}')/Attributes(LogicalName='{attributeMetadata.LogicalName}')/Microsoft.Dynamics.CRM.PicklistAttributeMetadata?$select=LogicalName&$expand=OptionSet($select=Options)"")),
+    OptionSet = Source[OptionSet],
+    Options = OptionSet[Options],
+    #""Converted to Table"" = Table.FromList(Options, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+    #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", {{""Value"", ""Color"", ""Label"", ""Description""}}, {{""Value"", ""Color"", ""Label"", ""Description""}}),
+    #""Expanded Label"" = Table.ExpandRecordColumn(#""Expanded Column1"", ""Label"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel"" = Table.ExpandRecordColumn(#""Expanded Label"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label""}}),
+    #""Expanded Description"" = Table.ExpandRecordColumn(#""Expanded UserLocalizedLabel"", ""Description"", {{""UserLocalizedLabel""}}, {{""UserLocalizedLabel""}}),
+    #""Expanded UserLocalizedLabel1"" = Table.ExpandRecordColumn(#""Expanded Description"", ""UserLocalizedLabel"", {{""Label""}}, {{""Label.1""}}),
+    #""Renamed Columns"" = Table.RenameColumns(#""Expanded UserLocalizedLabel1"",{{{{""Label.1"", ""Description""}}}})
+in
+    #""Renamed Columns""";
+
+            CreateTabPage(_tabControl, $"tabPage{attributeMetadata.LogicalName}", $"{attributeMetadata.DisplayName.UserLocalizedLabel.Label} ({attributeMetadata.LogicalName})", $"txt_tabPage{attributeMetadata.LogicalName}", str);
+        }
+
+        private void GeneratePowerBIOptionSet()
+        {
+            foreach (ListViewItem listViewItem in selectedAttributesListViewItemCache)
+            {
+                var currentPowerQueryAttribute = (PowerQueryAttribute)listViewItem.Tag;
+                var fieldMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == currentPowerQueryAttribute.Name.ToString()).FirstOrDefault();
+
+
+                if (fieldMetadata != null)
+                {
+                    if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata))
+                    {
+                        GenerateLocalOptionSet(tabControlOptionSet, fieldMetadata);
+                    }
+                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata))
+                    {
+                        GenerateStatusOptionSet(tabControlOptionSet, fieldMetadata);
+                    }
+                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata))
+                    {
+                        GenerateStateOptionSet(tabControlOptionSet, fieldMetadata);
+                    }
+                    else if (fieldMetadata.GetType() == typeof(Microsoft.Xrm.Sdk.Metadata.EnumAttributeMetadata))
+                    {
+                        GenerateEnumOptionSet(tabControlOptionSet, fieldMetadata);
+                    }
+                }
+            }
+        }
+
+        private void ClearOptionSetTab()
+        {
+            foreach (TabPage tapPage in tabControlOptionSet.TabPages)
+            {
+                tabODataResult.TabPages.Remove(tapPage);
+            }
+        }
+        #endregion
+
+        private void tsbUpdateFetchXml_Click(object sender, EventArgs e)
+        {
+            ClearFetchXmlTab();
+            UpdateFetchXmlListView();
+            tabMain.SelectedTab = tabPageFetchXml;
+            txtFilterXml.Text = FilterXml;
         }
     }
 }

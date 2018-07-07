@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ITLec.ChartGuy.PowerQueryBuilder.FetchXml;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -26,37 +27,24 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         private void SetForm()
         {
 
-            textBoxDisplayName.Text = attributeFormMessage.CurrentAttributeDisplayName;
+            textBoxDisplayName.Text = attributeFormMessage.CurrentPowerQueryAttribute.DisplayName;
+            checkBoxAddFormattedValue.Enabled = attributeFormMessage.CanAddFormattedValue;
+            var attributeMetadata = attributeFormMessage.CurrentPowerQueryAttribute.AttributeMetadata;
 
-           var attributeMetadata = attributeFormMessage.EntityMetadataWithItems.Attributes.Where(e => e.LogicalName == attributeFormMessage.AttributeLogicName).FirstOrDefault();
-
-
-            if (attributeMetadata !=null)
-            {
-                if(attributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata)
-                {
-                    groupBoxLookup.Visible = true;
-
-                    checkBoxAddLookupGuid.Enabled = attributeFormMessage.CanAddLookupGuid;
-
-                }
-                else
-                {
-                    groupBoxLookup.Visible = false;
-                }
-            }
+            
         }
 
         private void buttonOK_Click(object sender, EventArgs e)
         {
             attributeFormResponse = new AttributeFormResponse();
-            attributeFormResponse.AttributeLogicName = attributeFormMessage.AttributeLogicName;
-            attributeFormResponse.CurrentAttributeDisplayName = textBoxDisplayName.Text;
-            if (checkBoxAddLookupGuid.Checked)
+            attributeFormResponse.CurrentPowerQueryAttribute = attributeFormMessage.CurrentPowerQueryAttribute;
+
+            attributeFormResponse.CurrentPowerQueryAttribute.DisplayName = textBoxDisplayName.Text;
+            if (checkBoxAddFormattedValue.Checked)
             {
-                attributeFormResponse.NewFields.Add($"_{attributeFormMessage.AttributeLogicName}_value");
+                attributeFormResponse.NewFields.Add(FetchXmlQueryHelper.FormattedPowerQueryAttribute(attributeFormResponse.CurrentPowerQueryAttribute));
             }
-            
+
             this.DialogResult = DialogResult.OK;
             this.Close();
         }

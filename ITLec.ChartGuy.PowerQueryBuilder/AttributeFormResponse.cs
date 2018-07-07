@@ -8,9 +8,11 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 {
  public    class AttributeFormResponse
     {
-        public string AttributeLogicName { get; set; }
-        public string CurrentAttributeDisplayName { get; set; }
+        //public string AttributeLogicName { get; set; }
+        //public string CurrentAttributeDisplayName { get; set; }
 
-        public List<string> NewFields = new List<string>();
+      public   PowerQueryAttribute CurrentPowerQueryAttribute { get; set; }
+
+        public List<PowerQueryAttribute> NewFields = new List<PowerQueryAttribute>();
     }
 }

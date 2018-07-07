@@ -99,3 +99,5 @@ C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuild
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.csproj.GenerateResource.Cache
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.dll
 C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.pdb
+C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.AttributeLookupForm.resources
+C:\Work\ITLec\PowerQueryBuilder\PowerQueryBuilder\ITLec.ChartGuy.PowerQueryBuilder\obj\Debug\ITLec.ChartGuy.PowerQueryBuilder.csprojResolveAssemblyReference.cache
