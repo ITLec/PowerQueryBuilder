@@ -75,7 +75,9 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 lvEntities.BeginUpdate();
                 lvEntities.Items.Clear();
                 var filteredItems = listViewItemsCache
-                    .Where(item => item.Text.StartsWith(entityName, StringComparison.OrdinalIgnoreCase))
+                    .Where(item => (item.Text.StartsWith(entityName, StringComparison.OrdinalIgnoreCase) ||
+                    item.Tag.ToString().StartsWith(entityName, StringComparison.OrdinalIgnoreCase)
+                    ))
                     .ToArray();
                 lvEntities.Items.AddRange(filteredItems);
                 lvEntities.EndUpdate();
@@ -710,6 +712,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         {
 
             FetchXmlQuery fetchXmlQuery = new FetchXmlQuery(CurrentEntityMetadataWithItems, listViewFetchXmlConfig.Items.Cast<ListViewItem>().Select(e => (PowerQueryAttribute)e.Tag).ToList());
+            fetchXmlQuery.HasRecordURL = checkBoxFetchXml_HasRecordURL.Checked;
             fetchXmlQuery.FilterXml = FilterXml;
 
             string msg = fetchXmlQuery.Validate();
@@ -1140,7 +1143,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             foreach (ListViewItem selectedItem in allAttributesListTmp)
             {
                 var powerQueryAttribute = (PowerQueryAttribute)selectedItem.Tag;
-                if (!powerQueryAttribute.Name.Contains(textBoxAllAttributeFilter.Text))
+                if (!powerQueryAttribute.Name.Contains(textBoxAllAttributeFilter.Text) && !powerQueryAttribute.DisplayName.Contains(textBoxAllAttributeFilter.Text))
                 {
                     allAttributesList.Remove(selectedItem);
                 }
@@ -1353,7 +1356,15 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
             var firstSelectedItem = listViewFetchXmlConfig.SelectedItems[0];
             var currentPowerQueryAttribute = ((PowerQueryAttribute)firstSelectedItem.Tag);
-            var attributeLogicName = currentPowerQueryAttribute.Name;
+
+
+            if (currentPowerQueryAttribute.Type == AttributeType.Uniqueidentifier)
+            {
+                return;
+            }
+
+
+                var attributeLogicName = currentPowerQueryAttribute.Name;
 
             var attributeDisplayName = firstSelectedItem.Text;
             var attributeMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == attributeLogicName).FirstOrDefault();
@@ -1382,7 +1393,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                     {
                         canAddLookupLogicalName = false;
                     }
-                    if (((PowerQueryAttribute)item.Tag).Name == formattedPowerQueryAttribute.Name)
+                    if (((PowerQueryAttribute)item.Tag).Name == formattedPowerQueryAttribute.Name )
                     {
                         canAddFormattedName = false;
                     }
@@ -1495,7 +1506,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                         fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttGuid));
                     }
 
-                    if (_powerQueryAtt.Type == "Customer")
+                    if (_powerQueryAtt.Type == "Customer" || _powerQueryAtt.Type == "Owner")
                     {
                         var _powerQueryAttLogicalName = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
                         if (_powerQueryAttLogicalName != null)
@@ -1701,9 +1712,12 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             // string ServiceAPIURL = $"{arg}api/data/v{version.ToString(2)}";
 
             string versionVal = version.ToString(2);// (version.ToString(2) == "9.0") ? "8.2" : version.ToString(2);
-            string ServiceAPIURL = $"{arg}api/data/v{versionVal}";
+                                                    //   string ServiceAPIURL = $"{arg}api/data/v{versionVal}";
+                                                       string ServiceAPIURL = $@"Dyn365CEBaseURL & ""/api/data/v{versionVal}""";
 
 
+
+            CreateTabPage(tabControl, $"tabPageDyn365CEBaseURL", $"Dyn365CEBaseURL", $"txt_tabPageOrgURL", arg.Remove(arg.Length-1));
 
             CreateTabPage(tabControl, $"tabPageServiceRootURL", $"ServiceRootURL", $"txt_tabPageServiceRootURL", ServiceAPIURL);
 

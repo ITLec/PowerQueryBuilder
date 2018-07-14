@@ -10,7 +10,7 @@
         /// <summary> 
         /// Nettoyage des ressources utilisées.
         /// </summary>
-        /// <param name="disposing">true si les ressources managées doivent être supprimées ; sinon, false.</param>
+        /// <param name="disposing">true si les ressources managées doivent être supprimées ; sinon, false.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
@@ -36,6 +36,7 @@
             this.tsbLoadEntities = new System.Windows.Forms.ToolStripButton();
             this.toolStripSeparator1 = new System.Windows.Forms.ToolStripSeparator();
             this.tsbGenerateOData = new System.Windows.Forms.ToolStripButton();
+            this.tsbUpdateFetchXml = new System.Windows.Forms.ToolStripButton();
             this.tsbGenerateFechXml = new System.Windows.Forms.ToolStripButton();
             this.toolStripButtonOptionSet = new System.Windows.Forms.ToolStripButton();
             this.toolStripButtonGenerateServiceRootURL = new System.Windows.Forms.ToolStripButton();
@@ -51,6 +52,7 @@
             this.tabFetchXmlResult_PgeConfig = new System.Windows.Forms.TabPage();
             this.splitContainerFetchXmlConfig = new System.Windows.Forms.SplitContainer();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.label1 = new System.Windows.Forms.Label();
             this.linkLabelListViewFetchXml = new System.Windows.Forms.LinkLabel();
             this.linkLabelListViewFetchXmlSelectAll = new System.Windows.Forms.LinkLabel();
             this.groupBoxFetchXml = new System.Windows.Forms.GroupBox();
@@ -61,31 +63,31 @@
             this.tabControlOptionSet = new System.Windows.Forms.TabControl();
             this.tabPageServiceRootURL = new System.Windows.Forms.TabPage();
             this.tabControlServiceRootURL = new System.Windows.Forms.TabControl();
-            this.tsbUpdateFetchXml = new System.Windows.Forms.ToolStripButton();
-            this.label1 = new System.Windows.Forms.Label();
+            this.groupBox2 = new System.Windows.Forms.GroupBox();
+            this.checkBoxFetchXml_HasRecordURL = new System.Windows.Forms.CheckBox();
             this.splitContainer1 = new System.Windows.Forms.SplitContainer();
             this.gbEntities = new System.Windows.Forms.GroupBox();
             this.lblSearchEntity = new System.Windows.Forms.Label();
             this.txtSearchEntity = new System.Windows.Forms.TextBox();
+            this.lvEntities = new ListViewCustomReorder.ListViewEx();
+            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.splitContainer2 = new System.Windows.Forms.SplitContainer();
             this.gbSourceViews = new System.Windows.Forms.GroupBox();
+            this.lvSourceViews = new ListViewCustomReorder.ListViewEx();
+            this.allViewName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.allViewType = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.tableLayoutPanel1 = new System.Windows.Forms.TableLayoutPanel();
             this.tableLayoutPanel2 = new System.Windows.Forms.TableLayoutPanel();
             this.buttonAddToSelectedList = new System.Windows.Forms.Button();
             this.buttonRemoveFromSelectedFields = new System.Windows.Forms.Button();
             this.groupBoxAllFields = new System.Windows.Forms.GroupBox();
             this.textBoxAllAttributeFilter = new System.Windows.Forms.TextBox();
-            this.groupBoxSelectedFields = new System.Windows.Forms.GroupBox();
-            this.lvEntities = new ListViewCustomReorder.ListViewEx();
-            this.columnHeader1 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.columnHeader2 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.lvSourceViews = new ListViewCustomReorder.ListViewEx();
-            this.allViewName = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
-            this.allViewType = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.listViewAllFields = new ListViewCustomReorder.ListViewEx();
             this.columnHeader5 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader6 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader7 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
+            this.groupBoxSelectedFields = new System.Windows.Forms.GroupBox();
             this.listViewSelectedFields = new ListViewCustomReorder.ListViewEx();
             this.columnHeader3 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
             this.columnHeader4 = ((System.Windows.Forms.ColumnHeader)(new System.Windows.Forms.ColumnHeader()));
@@ -110,6 +112,7 @@
             this.groupBoxFilterXml.SuspendLayout();
             this.tabPageOptionSet.SuspendLayout();
             this.tabPageServiceRootURL.SuspendLayout();
+            this.groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).BeginInit();
             this.splitContainer1.Panel1.SuspendLayout();
             this.splitContainer1.Panel2.SuspendLayout();
@@ -186,6 +189,16 @@
             this.tsbGenerateOData.Size = new System.Drawing.Size(140, 27);
             this.tsbGenerateOData.Text = "Generate OData";
             this.tsbGenerateOData.Click += new System.EventHandler(this.tsbGenerateOData_Click);
+            // 
+            // tsbUpdateFetchXml
+            // 
+            this.tsbUpdateFetchXml.Enabled = false;
+            this.tsbUpdateFetchXml.Image = ((System.Drawing.Image)(resources.GetObject("tsbUpdateFetchXml.Image")));
+            this.tsbUpdateFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
+            this.tsbUpdateFetchXml.Name = "tsbUpdateFetchXml";
+            this.tsbUpdateFetchXml.Size = new System.Drawing.Size(147, 27);
+            this.tsbUpdateFetchXml.Text = "Update FetchXml";
+            this.tsbUpdateFetchXml.Click += new System.EventHandler(this.tsbUpdateFetchXml_Click);
             // 
             // tsbGenerateFechXml
             // 
@@ -331,7 +344,7 @@
             // 
             // splitContainerFetchXmlConfig.Panel2
             // 
-            this.splitContainerFetchXmlConfig.Panel2.Controls.Add(this.groupBoxFetchXml);
+            this.splitContainerFetchXmlConfig.Panel2.Controls.Add(this.groupBox2);
             this.splitContainerFetchXmlConfig.Panel2.Controls.Add(this.groupBoxFilterXml);
             this.splitContainerFetchXmlConfig.Size = new System.Drawing.Size(1065, 547);
             this.splitContainerFetchXmlConfig.SplitterDistance = 355;
@@ -350,6 +363,15 @@
             this.groupBox1.TabIndex = 98;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Selected Fields";
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.label1.Location = new System.Drawing.Point(3, 527);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(0, 17);
+            this.label1.TabIndex = 2;
             // 
             // linkLabelListViewFetchXml
             // 
@@ -376,9 +398,9 @@
             // groupBoxFetchXml
             // 
             this.groupBoxFetchXml.Controls.Add(this.txtFetchXml);
-            this.groupBoxFetchXml.Location = new System.Drawing.Point(8, 265);
+            this.groupBoxFetchXml.Location = new System.Drawing.Point(81, 199);
             this.groupBoxFetchXml.Name = "groupBoxFetchXml";
-            this.groupBoxFetchXml.Size = new System.Drawing.Size(706, 235);
+            this.groupBoxFetchXml.Size = new System.Drawing.Size(305, 172);
             this.groupBoxFetchXml.TabIndex = 3;
             this.groupBoxFetchXml.TabStop = false;
             this.groupBoxFetchXml.Text = "FechXml";
@@ -389,19 +411,22 @@
             this.txtFetchXml.Dock = System.Windows.Forms.DockStyle.Fill;
             this.txtFetchXml.Location = new System.Drawing.Point(3, 18);
             this.txtFetchXml.Name = "txtFetchXml";
-            this.txtFetchXml.Size = new System.Drawing.Size(700, 214);
+            this.txtFetchXml.Size = new System.Drawing.Size(299, 151);
             this.txtFetchXml.TabIndex = 0;
             this.txtFetchXml.Text = "";
             this.txtFetchXml.Visible = false;
             // 
             // groupBoxFilterXml
             // 
+            this.groupBoxFilterXml.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
             this.groupBoxFilterXml.Controls.Add(this.txtFilterXml);
-            this.groupBoxFilterXml.Dock = System.Windows.Forms.DockStyle.Top;
-            this.groupBoxFilterXml.Location = new System.Drawing.Point(0, 0);
+            this.groupBoxFilterXml.Controls.Add(this.groupBoxFetchXml);
+            this.groupBoxFilterXml.Location = new System.Drawing.Point(0, 154);
             this.groupBoxFilterXml.Name = "groupBoxFilterXml";
             this.groupBoxFilterXml.Size = new System.Drawing.Size(706, 198);
-            this.groupBoxFilterXml.TabIndex = 1;
+            this.groupBoxFilterXml.TabIndex = 2;
             this.groupBoxFilterXml.TabStop = false;
             this.groupBoxFilterXml.Text = "FilterXml";
             // 
@@ -452,24 +477,26 @@
             this.tabControlServiceRootURL.Size = new System.Drawing.Size(1073, 576);
             this.tabControlServiceRootURL.TabIndex = 2;
             // 
-            // tsbUpdateFetchXml
+            // groupBox2
             // 
-            this.tsbUpdateFetchXml.Enabled = false;
-            this.tsbUpdateFetchXml.Image = ((System.Drawing.Image)(resources.GetObject("tsbUpdateFetchXml.Image")));
-            this.tsbUpdateFetchXml.ImageTransparentColor = System.Drawing.Color.Magenta;
-            this.tsbUpdateFetchXml.Name = "tsbUpdateFetchXml";
-            this.tsbUpdateFetchXml.Size = new System.Drawing.Size(147, 27);
-            this.tsbUpdateFetchXml.Text = "Update FetchXml";
-            this.tsbUpdateFetchXml.Click += new System.EventHandler(this.tsbUpdateFetchXml_Click);
+            this.groupBox2.Controls.Add(this.checkBoxFetchXml_HasRecordURL);
+            this.groupBox2.Dock = System.Windows.Forms.DockStyle.Top;
+            this.groupBox2.Location = new System.Drawing.Point(0, 0);
+            this.groupBox2.Name = "groupBox2";
+            this.groupBox2.Size = new System.Drawing.Size(706, 138);
+            this.groupBox2.TabIndex = 1;
+            this.groupBox2.TabStop = false;
+            this.groupBox2.Text = "Options";
             // 
-            // label1
+            // checkBoxFetchXml_HasRecordURL
             // 
-            this.label1.AutoSize = true;
-            this.label1.Dock = System.Windows.Forms.DockStyle.Bottom;
-            this.label1.Location = new System.Drawing.Point(3, 527);
-            this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(0, 17);
-            this.label1.TabIndex = 2;
+            this.checkBoxFetchXml_HasRecordURL.AutoSize = true;
+            this.checkBoxFetchXml_HasRecordURL.Location = new System.Drawing.Point(18, 35);
+            this.checkBoxFetchXml_HasRecordURL.Name = "checkBoxFetchXml_HasRecordURL";
+            this.checkBoxFetchXml_HasRecordURL.Size = new System.Drawing.Size(137, 21);
+            this.checkBoxFetchXml_HasRecordURL.TabIndex = 0;
+            this.checkBoxFetchXml_HasRecordURL.Text = "Add Record URL";
+            this.checkBoxFetchXml_HasRecordURL.UseVisualStyleBackColor = true;
             // 
             // splitContainer1
             // 
@@ -527,6 +554,38 @@
             this.txtSearchEntity.TextChanged += new System.EventHandler(this.txtSearchEntity_TextChanged);
             this.txtSearchEntity.KeyUp += new System.Windows.Forms.KeyEventHandler(this.OnSearchKeyUp);
             // 
+            // lvEntities
+            // 
+            this.lvEntities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.lvEntities.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.columnHeader1,
+            this.columnHeader2});
+            this.lvEntities.FullRowSelect = true;
+            this.lvEntities.HideSelection = false;
+            this.lvEntities.LineAfter = -1;
+            this.lvEntities.LineBefore = -1;
+            this.lvEntities.Location = new System.Drawing.Point(8, 52);
+            this.lvEntities.Margin = new System.Windows.Forms.Padding(4);
+            this.lvEntities.Name = "lvEntities";
+            this.lvEntities.Size = new System.Drawing.Size(176, 498);
+            this.lvEntities.Sorting = System.Windows.Forms.SortOrder.Ascending;
+            this.lvEntities.TabIndex = 79;
+            this.lvEntities.UseCompatibleStateImageBehavior = false;
+            this.lvEntities.View = System.Windows.Forms.View.Details;
+            this.lvEntities.SelectedIndexChanged += new System.EventHandler(this.lvEntities_SelectedIndexChanged);
+            // 
+            // columnHeader1
+            // 
+            this.columnHeader1.Text = "Display name";
+            this.columnHeader1.Width = 140;
+            // 
+            // columnHeader2
+            // 
+            this.columnHeader2.Text = "Logical name";
+            this.columnHeader2.Width = 100;
+            // 
             // splitContainer2
             // 
             this.splitContainer2.BorderStyle = System.Windows.Forms.BorderStyle.Fixed3D;
@@ -559,6 +618,37 @@
             this.gbSourceViews.TabIndex = 91;
             this.gbSourceViews.TabStop = false;
             this.gbSourceViews.Text = "Select View";
+            // 
+            // lvSourceViews
+            // 
+            this.lvSourceViews.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
+            this.allViewName,
+            this.allViewType});
+            this.lvSourceViews.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.lvSourceViews.FullRowSelect = true;
+            this.lvSourceViews.HideSelection = false;
+            this.lvSourceViews.LineAfter = -1;
+            this.lvSourceViews.LineBefore = -1;
+            this.lvSourceViews.Location = new System.Drawing.Point(4, 19);
+            this.lvSourceViews.Margin = new System.Windows.Forms.Padding(4);
+            this.lvSourceViews.Name = "lvSourceViews";
+            this.lvSourceViews.Size = new System.Drawing.Size(858, 29);
+            this.lvSourceViews.SmallImageList = this.imageList1;
+            this.lvSourceViews.Sorting = System.Windows.Forms.SortOrder.Ascending;
+            this.lvSourceViews.TabIndex = 68;
+            this.lvSourceViews.UseCompatibleStateImageBehavior = false;
+            this.lvSourceViews.View = System.Windows.Forms.View.Details;
+            this.lvSourceViews.SelectedIndexChanged += new System.EventHandler(this.LvSourceViewsSelectedIndexChanged);
+            // 
+            // allViewName
+            // 
+            this.allViewName.Text = "View Name";
+            this.allViewName.Width = 350;
+            // 
+            // allViewType
+            // 
+            this.allViewType.Text = "View Type";
+            this.allViewType.Width = 130;
             // 
             // tableLayoutPanel1
             // 
@@ -636,80 +726,6 @@
             this.textBoxAllAttributeFilter.TextChanged += new System.EventHandler(this.textBoxAllAttributeFilter_TextChanged);
             this.textBoxAllAttributeFilter.KeyUp += new System.Windows.Forms.KeyEventHandler(this.textBoxAllAttributeFilter_KeyUp);
             // 
-            // groupBoxSelectedFields
-            // 
-            this.groupBoxSelectedFields.Controls.Add(this.listViewSelectedFields);
-            this.groupBoxSelectedFields.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.groupBoxSelectedFields.Location = new System.Drawing.Point(470, 3);
-            this.groupBoxSelectedFields.Name = "groupBoxSelectedFields";
-            this.groupBoxSelectedFields.Size = new System.Drawing.Size(393, 500);
-            this.groupBoxSelectedFields.TabIndex = 97;
-            this.groupBoxSelectedFields.TabStop = false;
-            this.groupBoxSelectedFields.Text = "Selected Fields";
-            // 
-            // lvEntities
-            // 
-            this.lvEntities.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
-            | System.Windows.Forms.AnchorStyles.Left) 
-            | System.Windows.Forms.AnchorStyles.Right)));
-            this.lvEntities.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.columnHeader1,
-            this.columnHeader2});
-            this.lvEntities.FullRowSelect = true;
-            this.lvEntities.HideSelection = false;
-            this.lvEntities.LineAfter = -1;
-            this.lvEntities.LineBefore = -1;
-            this.lvEntities.Location = new System.Drawing.Point(8, 52);
-            this.lvEntities.Margin = new System.Windows.Forms.Padding(4);
-            this.lvEntities.Name = "lvEntities";
-            this.lvEntities.Size = new System.Drawing.Size(176, 498);
-            this.lvEntities.Sorting = System.Windows.Forms.SortOrder.Ascending;
-            this.lvEntities.TabIndex = 79;
-            this.lvEntities.UseCompatibleStateImageBehavior = false;
-            this.lvEntities.View = System.Windows.Forms.View.Details;
-            this.lvEntities.SelectedIndexChanged += new System.EventHandler(this.lvEntities_SelectedIndexChanged);
-            // 
-            // columnHeader1
-            // 
-            this.columnHeader1.Text = "Display name";
-            this.columnHeader1.Width = 140;
-            // 
-            // columnHeader2
-            // 
-            this.columnHeader2.Text = "Logical name";
-            this.columnHeader2.Width = 100;
-            // 
-            // lvSourceViews
-            // 
-            this.lvSourceViews.Columns.AddRange(new System.Windows.Forms.ColumnHeader[] {
-            this.allViewName,
-            this.allViewType});
-            this.lvSourceViews.Dock = System.Windows.Forms.DockStyle.Fill;
-            this.lvSourceViews.FullRowSelect = true;
-            this.lvSourceViews.HideSelection = false;
-            this.lvSourceViews.LineAfter = -1;
-            this.lvSourceViews.LineBefore = -1;
-            this.lvSourceViews.Location = new System.Drawing.Point(4, 19);
-            this.lvSourceViews.Margin = new System.Windows.Forms.Padding(4);
-            this.lvSourceViews.Name = "lvSourceViews";
-            this.lvSourceViews.Size = new System.Drawing.Size(858, 29);
-            this.lvSourceViews.SmallImageList = this.imageList1;
-            this.lvSourceViews.Sorting = System.Windows.Forms.SortOrder.Ascending;
-            this.lvSourceViews.TabIndex = 68;
-            this.lvSourceViews.UseCompatibleStateImageBehavior = false;
-            this.lvSourceViews.View = System.Windows.Forms.View.Details;
-            this.lvSourceViews.SelectedIndexChanged += new System.EventHandler(this.LvSourceViewsSelectedIndexChanged);
-            // 
-            // allViewName
-            // 
-            this.allViewName.Text = "View Name";
-            this.allViewName.Width = 350;
-            // 
-            // allViewType
-            // 
-            this.allViewType.Text = "View Type";
-            this.allViewType.Width = 130;
-            // 
             // listViewAllFields
             // 
             this.listViewAllFields.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
@@ -750,6 +766,17 @@
             // columnHeader7
             // 
             this.columnHeader7.Text = "Type";
+            // 
+            // groupBoxSelectedFields
+            // 
+            this.groupBoxSelectedFields.Controls.Add(this.listViewSelectedFields);
+            this.groupBoxSelectedFields.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.groupBoxSelectedFields.Location = new System.Drawing.Point(470, 3);
+            this.groupBoxSelectedFields.Name = "groupBoxSelectedFields";
+            this.groupBoxSelectedFields.Size = new System.Drawing.Size(393, 500);
+            this.groupBoxSelectedFields.TabIndex = 97;
+            this.groupBoxSelectedFields.TabStop = false;
+            this.groupBoxSelectedFields.Text = "Selected Fields";
             // 
             // listViewSelectedFields
             // 
@@ -865,6 +892,8 @@
             this.groupBoxFilterXml.ResumeLayout(false);
             this.tabPageOptionSet.ResumeLayout(false);
             this.tabPageServiceRootURL.ResumeLayout(false);
+            this.groupBox2.ResumeLayout(false);
+            this.groupBox2.PerformLayout();
             this.splitContainer1.Panel1.ResumeLayout(false);
             this.splitContainer1.Panel2.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer1)).EndInit();
@@ -950,5 +979,7 @@
         private System.Windows.Forms.RichTextBox txtFilterXml;
         private System.Windows.Forms.ToolStripButton tsbUpdateFetchXml;
         private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.GroupBox groupBox2;
+        private System.Windows.Forms.CheckBox checkBoxFetchXml_HasRecordURL;
     }
 }

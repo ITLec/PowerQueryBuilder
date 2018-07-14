@@ -129,6 +129,7 @@
     </Compile>
     <Compile Include="AttributeFormMessage.cs" />
     <Compile Include="AttributeFormResponse.cs" />
+    <Compile Include="Constants.cs" />
     <Compile Include="CrmExceptionHelper.cs" />
     <Compile Include="DelegatesHelpers\ButtonDelegates.cs" />
     <Compile Include="DelegatesHelpers\CheckBoxDelegates.cs" />
@@ -240,7 +241,7 @@ C:\XTB.lnk
   </PropertyGroup>
   <ProjectExtensions>
     <VisualStudio>
-      <UserProperties BuildVersion_ConfigurationName="Release" BuildVersion_BuildVersioningStyle="None.YearStamp.MonthStamp.DayStamp" BuildVersion_UpdateAssemblyVersion="True" BuildVersion_UpdateFileVersion="True" />
+      <UserProperties BuildVersion_UpdateFileVersion="True" BuildVersion_UpdateAssemblyVersion="True" BuildVersion_BuildVersioningStyle="None.YearStamp.MonthStamp.DayStamp" BuildVersion_ConfigurationName="Release" />
     </VisualStudio>
   </ProjectExtensions>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

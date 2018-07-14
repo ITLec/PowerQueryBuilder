@@ -13,25 +13,41 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         public PowerQueryAttribute ParentPowerQueryAttribute { get; set; }
         public  AttributeMetadata AttributeMetadata { get; set; }
         public string Name { get; set; }
-        public string DisplayName { get; set; }
 
+        string displayName = "";
+        public string DisplayName
 
+        {
+            get
+            {
+                if(Type == AttributeType.Uniqueidentifier)
+                {
+                    return Name;
+                }
+                return displayName;
+            }
+            set
+
+            {
+                displayName = value;
+            }
+        }
         public string Type
         {
             get;
             set;
         }
-        
+
         private bool hasFormattedValue = false;
         public bool HasFormattedValue
         {
             get
             {
                 bool retVal = false;
-                if ((AttributeMetadata != null &&  !Name.StartsWith("_") && !Name.Contains(".") && !Name.Contains("@")
-                && Type != "Uniqueidentifier" && Type != "String") 
-                    
-                    
+                if ((AttributeMetadata != null && !Name.StartsWith("_") && !Name.Contains(".") && !Name.Contains("@")
+                && Type != AttributeType.Uniqueidentifier && Type != AttributeType.String)
+
+
                     || (hasFormattedValue == true))
                 {
                     retVal = true;
@@ -43,6 +59,40 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 hasFormattedValue = value;
             }
         }
+
+
+
+
+
+
+
+
+
+
+        //private bool canChangeDisplayName = false;
+        public bool CanChangeDisplayName
+        {
+            get
+            {
+                bool retVal = false;
+                if (Type != AttributeType.Uniqueidentifier)
+                {
+                    retVal = true;
+                }
+                return retVal;
+            }
+            //set
+            //{
+            //    hasFormattedValue = value;
+            //}
+        }
+
+
+
+
+
+
+
 
         public FetchXmlAttributeDetail FetchXmlAttributeDetail {
 
@@ -174,7 +224,8 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             get
             {
                 if (_Name.ToLower().Contains("latitude") || _Name.ToLower().Contains("longitude"))
-                    return "Currency.Type";
+                //    return "Currency.Type";
+                return "type number";
 
                 string type = _Type;
                 if (string.IsNullOrEmpty(type)&&_AttributeMetadata != null )
@@ -245,6 +296,15 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 return string.Format(@"{{""{0}"", ""{1}""}}", PowerBIExpandRecordColumnValue, _DisplayName);
             }
         }
+        public string PowerBIEmptyListValue//{"_ownerid_value", "Owner (ownerid)"}
+
+        {
+            get
+            {
+                return string.Format(@"#""{0}""={1}",  _DisplayName, PowerBIType.Replace("type","")
+                    );
+            }
+        }
 
 
     }
@@ -307,7 +367,8 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             get
             {
                 if (_Name.ToLower().Contains("latitude") || _Name.ToLower().Contains("longitude"))
-                    return "each Number.Round(_, 5), Currency.Type";
+                    //  return "each Number.Round(_, 5), Currency.Type";
+                    return "type number";
 
                 string type = _Type;
                 if (string.IsNullOrEmpty(type) && _AttributeMetadata != null)

@@ -29,7 +29,12 @@ namespace ITLec.ChartGuy.PowerQueryBuilder.FetchXml
             }
         }
 
-        
+        public bool HasRecordURL
+        {
+            get;
+            set;
+
+        }
 
 
         public string FilterXml
@@ -129,6 +134,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder.FetchXml
                 string expandedColumns = "";
                 string renameColumns = "";
                 string transformColumnTypes = "";
+                string emptyList = "";
                 foreach (PowerQueryAttribute currectPowerQuertAttribute in powerQueryAttributeList)
                 {
                     //  var currectPowerQuertAttribute = (PowerQueryAttribute)listItem.Tag;
@@ -154,11 +160,13 @@ namespace ITLec.ChartGuy.PowerQueryBuilder.FetchXml
                         {
                             renameColumns = $@"                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBIRenameColumnsValue}";
                             transformColumnTypes = $@"                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBITransformColumnTypeValue}";
+                            emptyList = $@"                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBIEmptyListValue}";
                         }
                         else
                         {
                             renameColumns = $@"{renameColumns},{Environment.NewLine}                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBIRenameColumnsValue}";
                             transformColumnTypes = $@"{transformColumnTypes},{Environment.NewLine}                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBITransformColumnTypeValue}";
+                            emptyList = $@"{emptyList},{Environment.NewLine}                                            {currectPowerQuertAttribute.FetchXmlAttributeDetail.PowerBIEmptyListValue}";
                         }
                     }
 
@@ -190,6 +198,10 @@ namespace ITLec.ChartGuy.PowerQueryBuilder.FetchXml
         in
             R,
     ResultsList = GetResults("""", 1),
+    ResultsTable = if List.IsEmpty(ResultsList) 
+                    then #table(
+                                    type table[ {emptyList}  ],{{}})
+                    else #""Converted to Table"",
 	#""Converted to Table"" = Table.FromList(ResultsList, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
 #""Expanded Column1"" = Table.ExpandRecordColumn(#""Converted to Table"", ""Column1"", 
                                         {{
@@ -207,11 +219,18 @@ namespace ITLec.ChartGuy.PowerQueryBuilder.FetchXml
 {{
 {transformColumnTypes}
 }})
-in
-    #""Changed Type""
-
 ";
-                
+
+                finalMainQuery = finalMainQuery +( HasRecordURL ? $@",   
+#""Added Link"" = Table.AddColumn(#""Changed Type"", ""Link"", each Dyn365CEBaseURL & ""/main.aspx?etn={currentEntityMetadataWithItems.LogicalName}&pagetype=entityrecord&id=%7b""& [{currentEntityMetadataWithItems.LogicalName}id]&""%7d"")" : 
+@"");
+
+                finalMainQuery = finalMainQuery + $@",
+#""Result"" = if List.IsEmpty(ResultsList) 
+                then ResultsTable
+                    else #""{(HasRecordURL? "Added Link":"Changed Type")}""
+in
+    #""Result""";
 
                 return finalMainQuery;
             }
