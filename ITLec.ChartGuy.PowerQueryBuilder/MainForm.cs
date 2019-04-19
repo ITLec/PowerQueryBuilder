@@ -1,4 +1,4 @@
-﻿// PROJECT : ITLec.ChartGuy.PowerQueryBuilder
+// PROJECT : ITLec.ChartGuy.PowerQueryBuilder
 
 using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
@@ -20,7 +20,7 @@ using ITLec.ChartGuy.PowerQueryBuilder.FetchXml;
 
 namespace ITLec.ChartGuy.PowerQueryBuilder
 {
-    public partial class MainForm : PluginControlBase, IGitHubPlugin, IHelpPlugin
+    public partial class MainForm : PluginControlBase, IGitHubPlugin, IHelpPlugin, IMessageBusHost
     {
         #region IGitHubPlugin
         public string HelpUrl { get { return "https://crmchartguy.com/power-query-builder/"; } }
@@ -56,6 +56,9 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
         #endregion Constructor
 
+
+        bool CanClearSelectedGrid = true;
+
         #region Main ToolStrip Handlers
 
         #region Fill Entities
@@ -89,7 +92,15 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             txtSearchEntity.Text = string.Empty;
             lvEntities.Items.Clear();
             listViewAllFields.Items.Clear();
-            listViewSelectedFields.Items.Clear();
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
             gbEntities.Enabled = false;
 
             lvSourceViews.Items.Clear();
@@ -133,6 +144,8 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         private void TsbLoadEntitiesClick(object sender, EventArgs e)
         {
             ExecuteMethod(LoadEntities);
+
+            mainFetchXmltoolStripDropDownButton.Enabled = true;
         }
 
         #endregion Fill Entities
@@ -142,7 +155,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         #endregion Main ToolStrip Handlers
 
         #region Views
-        public static string FilterXml="";
+        public static string FetchXml = "";
         private void LvSourceViewsSelectedIndexChanged(object sender, EventArgs e)
         {
             FillAttributes();
@@ -163,11 +176,10 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                                               ? currentSelectedView["fetchxml"].ToString()
                                               : string.Empty;
 
-                        XmlDocument layoutDoc = new XmlDocument();
-                        layoutDoc.LoadXml(layoutXml);
+                        XmlDocument fetchDoc = new XmlDocument();
+                        fetchDoc.LoadXml(fetchXml);
 
-                        FilterXml = FetchXmlHelper.GetFilterXmlStr(fetchXml);
-                        txtFetchXml.Text = fetchXml;
+                        FetchXml = fetchXml; //FetchXmlHelper.GetFilterXmlStr(fetchXml);
                         var headers = new List<ColumnHeader>();
 
 
@@ -179,7 +191,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                         //    MoveItemFormListViewToAnother(listViewSelectedFields, listViewAllFields, (PowerQueryAttribute) item.Tag);
                         //}
 
-                        foreach (XmlNode columnNode in layoutDoc.SelectNodes("grid/row/cell"))
+                        foreach (XmlNode columnNode in fetchDoc.SelectNodes("/fetch/entity/attribute"))
                         {
 
                             /////////////
@@ -195,9 +207,11 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                                 AttributeMetadata attribute = (from attr in CurrentEntityMetadataWithItems.Attributes
                                                                where attr.LogicalName == columnNode.Attributes["name"].Value
                                                                select attr).FirstOrDefault();
-
-                                PowerQueryAttribute powerQueryAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(attribute);
-                                AddItemToSelectedAttributeslistView(powerQueryAttribute);
+                                if (attribute != null)
+                                {
+                                    PowerQueryAttribute powerQueryAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(attribute);
+                                    AddItemToSelectedAttributeslistView(powerQueryAttribute);
+                                }
                             }
 
 
@@ -453,39 +467,23 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
         private void lvEntities_SelectedIndexChanged(object sender, EventArgs eventArgs)
         {
+
+            if (lvEntities.SelectedItems.Count > 0 && lvEntities.SelectedItems[0] != null && lvEntities.SelectedItems[0].Tag != null)
+            {
+                string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
+                lvEntitiesSelectedIndexChanged(entityLogicalName, "");
+            }
+        }
+
+        private void lvEntitiesSelectedIndexChanged(string entityLogicalName, string fetchXml)
+        {
             ClearForm();
             listViewAllFields.Items.Clear();
-            //WorkAsync(new WorkAsyncInfo
+            
+
+            //if (lvEntities.SelectedItems.Count > 0)
             //{
-            //    Message = "Loading Entity Views & Attributes...",
-            //    Work = (bw, evt) =>
-            //    {
 
-            //        if (lvEntities.SelectedItems.Count > 0)
-            //        {
-            //            string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
-
-            //            // Reinit other controls
-            //            lvSourceViews.Items.Clear();
-
-            //            Cursor = Cursors.WaitCursor;
-
-            //            // Launch treatment
-            //            var bwFillViews = new BackgroundWorker();
-            //            bwFillViews.DoWork += BwFillViewsDoWork;
-            //            bwFillViews.RunWorkerAsync(entityLogicalName);
-            //            bwFillViews.RunWorkerCompleted += BwFillViewsRunWorkerCompleted;
-
-            //        }
-            //    }
-            //});
-
-            //////////////////////
-
-            if (lvEntities.SelectedItems.Count > 0)
-            {
-
-                string entityLogicalName = lvEntities.SelectedItems[0].Tag.ToString();
 
                 // Reinit other controls
                 lvSourceViews.Items.Clear();
@@ -499,7 +497,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                         List<Entity> viewsList = ViewHelper.RetrieveViews(entityLogicalName, entitiesCache, Service);
 
                         CurrentEntityMetadataWithItems = MetadataHelper.RetrieveEntity(entityLogicalName, Service);
-                          e.Result = viewsList;
+                        e.Result = viewsList;
                     },
                     PostWorkCallBack = e =>
                     {
@@ -520,20 +518,62 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                             lvSourceViews.Items.AddRange(sourceViewsItems.ToArray());
 
                             FillAttributes();
+
+                            if(!string.IsNullOrEmpty( fetchXml))
+                            {
+                                FetchXml = fetchXml;
+                                updateSelectedFieldsGridWithFetchXml();
+                            }
+                            else
+                            {
+                                FetchXml = "";
+                            }
                             EnableVisableListViewSelectedFields();
-
-
                             Cursor = Cursors.Default;
                         }
                     }
                 });
+            //}
+        }
+
+        private void updateSelectedFieldsGridWithFetchXml()
+        {
+            XmlDocument fetchDoc = new XmlDocument();
+            fetchDoc.LoadXml(FetchXml);
+
+            string entityName = fetchDoc?.DocumentElement?.SelectSingleNode("/fetch/entity").Attributes["name"].Value;
+
+
+            foreach (XmlNode columnNode in fetchDoc.SelectNodes("/fetch/entity/attribute"))
+            {
+                /////////////
+                //   columnNode.app
+
+                if (!columnNode.Attributes["name"].Value.Contains("."))
+                {
+                    AttributeMetadata attribute = (from attr in CurrentEntityMetadataWithItems.Attributes
+                                                   where attr.LogicalName == columnNode.Attributes["name"].Value
+                                                   select attr).FirstOrDefault();
+                    if (attribute != null)
+                    {
+                        PowerQueryAttribute powerQueryAttribute = PowerQueryAttribute.GetPowerQueryAttributeByMetadata(attribute);
+                        AddItemToSelectedAttributeslistView(powerQueryAttribute);
+                    }
+                }
             }
         }
 
         private void ClearForm()
         {
 
-            listViewSelectedFields.Items.Clear();
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
             
             ClearTabs();
         }
@@ -564,7 +604,18 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 selectedAttributesListViewItemCache.Remove(item);
             }
 
-            listViewSelectedFields.Items.Clear();
+            
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
+
+
             ClearTabs();
             listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
 
@@ -577,10 +628,12 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             if (tabMain.SelectedIndex == 0)
             {
                 tsbLoadEntities.Visible = true;
+                mainFetchXmltoolStripDropDownButton.Visible = true;
             }
             else
             {
                 tsbLoadEntities.Visible = false;
+                mainFetchXmltoolStripDropDownButton.Visible = false;
             }
 
             if (tabMain.SelectedIndex == 2)
@@ -680,7 +733,18 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 selectedFieldItem.SubItems.Add(_powerQueryAttribute.Type);
                 selectedAttributesListViewItemCache.Add(selectedFieldItem);
             }
-            listViewSelectedFields.Items.Clear();
+
+
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
+
             listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
 
 
@@ -713,8 +777,8 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
             FetchXmlQuery fetchXmlQuery = new FetchXmlQuery(CurrentEntityMetadataWithItems, listViewFetchXmlConfig.Items.Cast<ListViewItem>().Select(e => (PowerQueryAttribute)e.Tag).ToList());
             fetchXmlQuery.HasRecordURL = checkBoxFetchXml_HasRecordURL.Checked;
-            fetchXmlQuery.FilterXml = FilterXml;
-
+              fetchXmlQuery.FetchXml = txtFetchXml.Text;
+            fetchXmlQuery.IsUseAllAttributesOption = checkBoxUseAllAttributes.Checked;
             string msg = fetchXmlQuery.Validate();
 
             if (string.IsNullOrEmpty(msg))
@@ -727,59 +791,10 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 MessageBox.Show(msg);
             }
 
-
-
-            //WorkAsync(new WorkAsyncInfo
-            //{
-            //    Message = "Generating FetchXml Query...",
-            //    Work = (bw, e) =>
-            //    {
-            //        FetchXmlQuery fetchXmlQuery = new FetchXmlQuery(CurrentEntityMetadataWithItems, listViewFetchXmlConfig.Items.Cast<ListViewItem>().Select(e => (PowerQueryAttribute)e.Tag).ToList());
-            //        e.Result = fetchXmlQuery;
-            //    },
-            //    PostWorkCallBack = e =>
-            //    {
-            //        if (e.Error != null)
-            //        {
-            //            string errorMessage = CrmExceptionHelper.GetErrorMessage(e.Error, true);
-            //            CommonDelegates.DisplayMessageBox(ParentForm, errorMessage, "Error", MessageBoxButtons.OK,
-            //                                              MessageBoxIcon.Error);
-            //        }
-            //        else
-            //        {
-            //            string finalMainQuery = (string)e.Result;
-            //        }
-            //    }
-            //});
+            
 
         }
-
-        //private void listViewFetchXmlConfig_AddFormattedValue()
-        //{
-
-        //    foreach (ListViewItem item in listViewFetchXmlConfig.CheckedItems)
-        //    {
-        //        var powerQueryAttribute = (PowerQueryAttribute)item.Tag;
-
-        //        if (powerQueryAttribute.AttributeMetadata != null && powerQueryAttribute.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata && !powerQueryAttribute.Name.StartsWith("_") && !powerQueryAttribute.Name.Contains(".") && !powerQueryAttribute.Name.Contains("@"))
-        //        {
-
-        //            var fieldGuidName = $"_{powerQueryAttribute.Name}_value";
-        //            var lookupLogicalName = $"_{powerQueryAttribute.Name}_value@Microsoft.Dynamics.CRM.lookuplogicalname";
-
-        //            PowerQueryAttribute guidPowerQueryAttribute = new PowerQueryAttribute();
-        //            guidPowerQueryAttribute.ParentPowerQueryAttribute = powerQueryAttribute;
-        //            guidPowerQueryAttribute.Name = fieldGuidName;
-        //            guidPowerQueryAttribute.DisplayName = powerQueryAttribute.DisplayName + " - GUID";
-
-
-
-        //            var fieldNameFormated = $"{fieldGuidName}@OData.Community.Display.V1.FormattedValue";
-
-        //        }
-        //    }
-
-        //}
+        
 
         private void txtSearchEntity_TextChanged(object sender, EventArgs e)
         {
@@ -829,7 +844,16 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                 }
             }
 
-            listViewSelectedFields.Items.Clear();
+
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
             ClearTabs();
             listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
 
@@ -1010,88 +1034,11 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             var attributeDisplayName = firstSelectedItem.Text;
             var attributeMetadata = CurrentEntityMetadataWithItems.Attributes.Where(e => e.LogicalName == attributeLogicName).FirstOrDefault();
 
-
-
-            //if (attributeMetadata != null && attributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata && !attributeLogicName.StartsWith("_") && !attributeLogicName.Contains("."))
-            //{
-            //    LookupFormMessage lookupFormMessage = new LookupFormMessage(currentPowerQueryAttribute);
-            //    //lookupFormMessage.EntityMetadataWithItems = CurrentEntityMetadataWithItems;
-
-
-            //    var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
-            //    var lookupGuidPowerQueryAttribute = FetchXmlQueryHelper.LookupGuidPowerQueryAttribute(currentPowerQueryAttribute);
-            //    var logicalLookupPowerQueryAttribute = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(currentPowerQueryAttribute);
-            //    bool canAddGuidField = true;
-            //    bool canAddLookupLogicalName = true;
-            //    bool canAddFormattedName = true;
-            //    foreach (ListViewItem item in listViewFetchXmlConfig.Items)
-            //    {
-            //        if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
-            //        {
-            //            canAddGuidField = false;
-            //        }
-            //        if (((PowerQueryAttribute)item.Tag).Name == lookupGuidPowerQueryAttribute.Name)
-            //        {
-            //            canAddLookupLogicalName = false;
-            //        }
-            //        if (((PowerQueryAttribute)item.Tag).Name == formattedPowerQueryAttribute.Name)
-            //        {
-            //            canAddFormattedName = false;
-            //        }
-            //    }
-            //    lookupFormMessage.CanAddLookupGuid = canAddGuidField;
-            //    lookupFormMessage.CanAddLookupLogicalName = canAddLookupLogicalName;
-
-            //    lookupFormMessage.CanAddFormattedValue = canAddFormattedName;
-
-            //    using (var form = new AttributeLookupForm(lookupFormMessage))
-            //    {
-            //        var result = form.ShowDialog();
-            //        if (result == DialogResult.OK)
-            //        {
-            //            var attributeFormResponse = form.attributeFormResponse;
-
-            //            foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
-            //            {
-            //                //todo
-            //                AddFetchXmlAttributeslistView(powerQueryAttribute);
-            //            }
-            //            listViewFetchXmlConfig.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
-            //            listViewFetchXmlConfig.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
-            //        }
-            //    }
-            //}
-            //else
+            
             {
 
                 AttributeFormMessage attributeFormMessage = new AttributeFormMessage(currentPowerQueryAttribute);
-
-
-
-                //bool canAddFormattedValueField = true;
-
-                //var formattedPowerQueryAttribute = FetchXmlQueryHelper.FormattedPowerQueryAttribute(currentPowerQueryAttribute);
-
-                //if (formattedPowerQueryAttribute != null)
-                //{
-                //    foreach (ListViewItem item in listViewFetchXmlConfig.Items)
-                //    {
-                //        var itemPowerQueryAttribute = (PowerQueryAttribute)item.Tag;
-                //        if (itemPowerQueryAttribute.Name == formattedPowerQueryAttribute.Name
-                //            || currentPowerQueryAttribute.Type == "FormattedValue"
-                //            || currentPowerQueryAttribute.Name.StartsWith("_")
-                //            || currentPowerQueryAttribute.Name.Contains("@"))
-                //        {
-                //            canAddFormattedValueField = false;
-                //            break;
-                //        }
-                //    }
-                //}
-                //else
-                //{
-                //    canAddFormattedValueField = false;
-                //}
-                attributeFormMessage.CanAddFormattedValue = false;// canAddFormattedValueField;
+                attributeFormMessage.CanAddFormattedValue = false;
 
 
 
@@ -1101,10 +1048,6 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                     if (result == DialogResult.OK)
                     {
                         var attributeFormResponse = form.attributeFormResponse;
-                        //foreach (var powerQueryAttribute in attributeFormResponse.NewFields)
-                        //{
-                        //    AddFetchXmlAttributeslistView(powerQueryAttribute);
-                        //}
                         listViewSelectedFields.SelectedItems[0].Text = attributeFormResponse.CurrentPowerQueryAttribute.DisplayName;
 
                         listViewSelectedFields.SelectedItems[0].Tag = attributeFormResponse.CurrentPowerQueryAttribute;
@@ -1123,14 +1066,12 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
         {
             List<ListViewItem> allAttributesList = new List<ListViewItem>(allAttributesListViewItemCache);
 
-
             foreach (ListViewItem selectedItem in listViewSelectedFields.Items)
             {
                 var selectedItemPowerQueryAttribute = (PowerQueryAttribute)selectedItem.Tag;
 
                 for (int i = allAttributesList.Count - 1; i >= 0; i--)
                 {
-
                     var attributePowerQueryAttribute = (PowerQueryAttribute)allAttributesList[i].Tag;
                     if (attributePowerQueryAttribute.Name == selectedItemPowerQueryAttribute.Name)
                     {
@@ -1143,7 +1084,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             foreach (ListViewItem selectedItem in allAttributesListTmp)
             {
                 var powerQueryAttribute = (PowerQueryAttribute)selectedItem.Tag;
-                if (!powerQueryAttribute.Name.Contains(textBoxAllAttributeFilter.Text) && !powerQueryAttribute.DisplayName.Contains(textBoxAllAttributeFilter.Text))
+                if (!powerQueryAttribute.Name.ToLower().Contains(textBoxAllAttributeFilter.Text.ToLower()) && !powerQueryAttribute.DisplayName.ToLower().Contains(textBoxAllAttributeFilter.Text.ToLower()))
                 {
                     allAttributesList.Remove(selectedItem);
                 }
@@ -1161,7 +1102,16 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             var entityMetaData = CurrentEntityMetadataWithItems;
 
             listViewAllFields.Items.Clear();
-            listViewSelectedFields.Items.Clear();
+
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
             textBoxAllAttributeFilter.Text = "";
 
             List<ListViewItem> listItems = new List<ListViewItem>();
@@ -1196,7 +1146,17 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             listViewAllFields.Items.Clear();
             listViewAllFields.Items.AddRange(allAttributesListViewItemCache.ToArray());
             selectedAttributesListViewItemCache = new List<ListViewItem>();
-            listViewSelectedFields.Items.Clear();
+
+
+
+            if (CanClearSelectedGrid == true)
+            {
+                listViewSelectedFields.Items.Clear();
+            }
+            else
+            {
+                CanClearSelectedGrid = true;
+            }
             listViewSelectedFields.Items.AddRange(selectedAttributesListViewItemCache.ToArray());
         }
         private void listViewAllFields_DrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
@@ -1477,7 +1437,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
             fetchXmlAttributesListViewItemCache = new List<ListViewItem>();
 
             bool isEntityIdFieldExisted = false;
-            string entityIdFieldExisted = CurrentEntityMetadataWithItems.LogicalName + "id";
+            string entityIdFieldExisted = CurrentEntityMetadataWithItems.PrimaryIdAttribute;//.PrimaryNameAttribute;  //.LogicalName + "id";
             foreach (ListViewItem item in listViewSelectedFields.Items)
             {
                 ListViewItem clonedItem = (ListViewItem)item.Clone();
@@ -1521,9 +1481,22 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                             fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
                         }
                 }
+
+                else if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                {
+
+                    var _powerQueryAttFormatted = FetchXmlQueryHelper.FormattedPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                    _powerQueryAttFormatted.DisplayName = _powerQueryAtt.DisplayName;
+                    if (_powerQueryAttFormatted != null)
+                    {
+                        fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
+
+                    }
+                }
+
                 else if (
                      !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StringAttributeMetadata)
-                     && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                  //   && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
                      && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MoneyAttributeMetadata)
                      && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.IntegerAttributeMetadata)
                      && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MemoAttributeMetadata)
@@ -1537,14 +1510,25 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
                     }
                 }
+                //else if    (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                //{
+
+                //}
                 if (!(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata))
                 {
-                    if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+                    if  (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+
+
+                  //  || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata
+
                     || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata
                     || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata
                     || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.BooleanAttributeMetadata)
                     {
                         _powerQueryAtt.DisplayName = displayName + $" ({_powerQueryAtt.Name})";
+                    }else if(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                    {
+                        _powerQueryAtt.DisplayName = _powerQueryAtt.Name;
                     }
                     fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAtt));
                 }
@@ -1558,7 +1542,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
                     fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(idAttribute));
                 }
             }
-            listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
+            //listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
         }
 
         private void linkLabelListViewFetchXmlSelectAll_LinkClicked(object sender, LinkLabelLinkClickedEventArgs e)
@@ -1583,13 +1567,14 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
             ClearFetchXmlTab();
             listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
-            txtFilterXml.Text = FilterXml;
+            txtFetchXml.Text = FetchXml;
         }
         private void ClearFetchXmlTab()
         {
             listViewFetchXmlConfig.Items.Clear();
 
-            txtFilterXml.Text = "";
+            txtFetchXml.Text = "";
+            txtFetchXml.Text = "";
 
             foreach (TabPage tapPage in tabFetchXmlResult.TabPages)
             {
@@ -1713,7 +1698,7 @@ namespace ITLec.ChartGuy.PowerQueryBuilder
 
             string versionVal = version.ToString(2);// (version.ToString(2) == "9.0") ? "8.2" : version.ToString(2);
                                                     //   string ServiceAPIURL = $"{arg}api/data/v{versionVal}";
-                                                       string ServiceAPIURL = $@"Dyn365CEBaseURL & ""/api/data/v{versionVal}""";
+                                                       string ServiceAPIURL = $@"=Dyn365CEBaseURL & ""/api/data/v{versionVal}""";
 
 
 
@@ -1862,10 +1847,237 @@ in
 
         private void tsbUpdateFetchXml_Click(object sender, EventArgs e)
         {
-            ClearFetchXmlTab();
+             ClearFetchXmlTab();
             UpdateFetchXmlListView();
+
+            AddLinkEntities();
+            listViewFetchXmlConfig.Items.Clear();
+            listViewFetchXmlConfig.Items.AddRange(fetchXmlAttributesListViewItemCache.ToArray());
             tabMain.SelectedTab = tabPageFetchXml;
-            txtFilterXml.Text = FilterXml;
+            txtFetchXml.Text = FetchXml;
+        }
+
+        private void AddLinkEntities()
+        {
+            foreach (var linkEntity in FetchXmlHelper.GetLinkedEntitiesAttributes( FetchXml, Service))
+            {
+
+
+                string displayNameAttributeMetadataInMainEntity = linkEntity.LinkedAttributeMetadata.LogicalName;
+
+                if (linkEntity.LinkedAttributeMetadata.DisplayName != null && linkEntity.LinkedAttributeMetadata.DisplayName.UserLocalizedLabel != null && linkEntity.LinkedAttributeMetadata.DisplayName.UserLocalizedLabel.Label != null)
+                {
+
+                    displayNameAttributeMetadataInMainEntity = linkEntity.LinkedAttributeMetadata.DisplayName.UserLocalizedLabel.Label;
+                }
+
+                foreach (var _powerQueryAtt in linkEntity.PowerQueryAttributeList)
+                {
+                    // fetchXmlAttributesListViewItemCache(powerQueryAttribute);
+                   
+                    if (true)
+                    {
+
+
+
+
+
+
+
+
+                        string displayName = _powerQueryAtt.DisplayName;
+
+                        if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.BooleanAttributeMetadata
+                            )
+                        {
+                            string displayname = _powerQueryAtt.DisplayName;
+
+                            _powerQueryAtt.DisplayName = _powerQueryAtt.Name;
+                            var _powerQueryAttGuid = FetchXmlQueryHelper.LookupGuidPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                            if (_powerQueryAttGuid != null)
+                            {
+
+                                _powerQueryAttGuid.DisplayName = _powerQueryAttGuid.DisplayName + $" ({displayNameAttributeMetadataInMainEntity})";
+                                fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttGuid));
+                            }
+
+                            if (_powerQueryAtt.Type == "Customer" || _powerQueryAtt.Type == "Owner")
+                            {
+                                var _powerQueryAttLogicalName = FetchXmlQueryHelper.LogicalLookupPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                                if (_powerQueryAttLogicalName != null)
+                                {
+                                    _powerQueryAttLogicalName.DisplayName = _powerQueryAttLogicalName.DisplayName + $" ({displayNameAttributeMetadataInMainEntity})";
+                                    fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttLogicalName));
+                                }
+                            }
+                            var _powerQueryAttFormatted = FetchXmlQueryHelper.FormattedPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                            if (_powerQueryAttFormatted != null)
+                            {
+                                _powerQueryAttFormatted.DisplayName = _powerQueryAttFormatted.DisplayName + $" ({displayNameAttributeMetadataInMainEntity})";
+                                fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
+                            }
+                        }
+                        else if (
+                             !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StringAttributeMetadata)
+                             && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.DateTimeAttributeMetadata)
+                             && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MoneyAttributeMetadata)
+                             && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.IntegerAttributeMetadata)
+                             && !(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.MemoAttributeMetadata)
+                             )
+                        {
+
+                            var _powerQueryAttFormatted = FetchXmlQueryHelper.FormattedPowerQueryAttribute(PowerQueryAttribute.GetNewObject(_powerQueryAtt));
+                            if (_powerQueryAttFormatted != null)
+                            {
+                                _powerQueryAttFormatted.DisplayName = _powerQueryAttFormatted.DisplayName + $" ({displayNameAttributeMetadataInMainEntity})";
+                                fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAttFormatted));
+
+                            }
+                        }
+                        if (!(_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.LookupAttributeMetadata))
+                        {
+                            if (_powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.PicklistAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StateAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.StatusAttributeMetadata
+                            || _powerQueryAtt.AttributeMetadata is Microsoft.Xrm.Sdk.Metadata.BooleanAttributeMetadata)
+                            {
+                                _powerQueryAtt.DisplayName = displayName + $" ({displayNameAttributeMetadataInMainEntity})";
+                            }
+                            fetchXmlAttributesListViewItemCache.Add(PowerQueryAttribute.GetListViewItemByPowerQueryAttribute(_powerQueryAtt));
+                        }
+
+
+
+
+
+
+
+
+
+
+
+                    }
+                }
+            }
+        }
+
+        public event EventHandler<XrmToolBox.Extensibility.MessageBusEventArgs> OnOutgoingMessage;
+
+        public void OnIncomingMessage(XrmToolBox.Extensibility.MessageBusEventArgs message)
+        {
+            if (message.SourcePlugin == "FetchXML Builder" &&
+                message.TargetArgument is string)
+            {
+              SetFetchXml(  message.TargetArgument);
+            }
+        }
+        private void GetFromFXB()
+        {
+            var messageBusEventArgs = new MessageBusEventArgs("FetchXML Builder")
+            {
+                //SourcePlugin = "Bulk Data Updater"
+            };
+            messageBusEventArgs.TargetArgument = FetchXml;
+            OnOutgoingMessage(this, messageBusEventArgs);
+        }
+        private void toolStripButtonLoadFechXml_Click(object sender, EventArgs e)
+        {
+            return;
+            
+        }
+
+        private void SetFetchXml(string fetchXml)
+        {
+            FetchXml = fetchXml;
+
+
+            XmlDocument fetchDoc = new XmlDocument();
+            fetchDoc.LoadXml(FetchXml);
+
+            string entityName = fetchDoc?.DocumentElement?.SelectSingleNode("/fetch/entity").Attributes["name"].Value;
+
+
+            lvEntitiesSelectedIndexChanged(entityName, FetchXml);
+            return;
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Loading FetchXml items...",
+                Work = (bw, evt) =>
+                {
+                    //     lvEntitiesSelectedIndexChanged();
+
+
+                    List<Entity> viewsList = ViewHelper.RetrieveViews(entityName, entitiesCache, Service);
+
+                    if (CurrentEntityMetadataWithItems == null)
+                        CurrentEntityMetadataWithItems = MetadataHelper.RetrieveEntity(entityName, Service);
+                    evt.Result = viewsList;
+
+                },
+                PostWorkCallBack = evt =>
+                {
+                    if (evt.Error != null)
+                    {
+                        MessageBox.Show(ParentForm, "Error while displaying FetchXml: " + evt.Error.Message, "Error",
+                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    else
+                    {
+
+
+                        /*  
+                                               foreach (ListViewItem item in lvEntities.Items)
+                                               {
+                                                   if (item.Tag.ToString() == entityName)
+                                                   {
+                                                       item.Selected = true;
+                                                       break;
+                                                   }
+                                               }
+                                                return;
+                                                   List<Entity> viewsList = (List<Entity>)evt.Result;
+                                                   FillViews(entityName, viewsList);
+
+
+
+                                                   gbSourceViews.Enabled = true;
+                                                   lvSourceViews.Items.AddRange(sourceViewsItems.ToArray());
+
+                                                   FillAttributes();
+                                                   EnableVisableListViewSelectedFields();
+                                                   */
+
+
+                        Cursor = Cursors.Default;
+                    }
+                }
+            });
+
+        }
+
+        private void editFetchXmlToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+
+            using (var form = new FetchXml.FetchXmlForm(FetchXml))
+            {
+                var result = form.ShowDialog();
+                if (result == DialogResult.OK)
+                {
+                    var fetchXml = form.FetchXml;
+
+
+                    SetFetchXml(fetchXml);
+                }
+            }
+        }
+
+        private void openFetchXmlBuilderToolStripMenuItem_Click(object sender, EventArgs e)
+        {
+            GetFromFXB();
         }
     }
 }
